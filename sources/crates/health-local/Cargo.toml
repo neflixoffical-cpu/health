@@ -1,0 +1,26 @@
+[package]
+name = "health-local"
+description = "Health local models: system info, GGUF catalog, Hugging Face, downloads, llama.cpp runtime, Ollama"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+health-core = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+futures-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+zip = { workspace = true }
+parking_lot = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
+winreg = { workspace = true }

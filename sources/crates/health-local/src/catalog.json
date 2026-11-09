@@ -1,0 +1,1399 @@
+{
+ "verified_at": "2026-11-08",
+ "source": "https://huggingface.co/api/models/<repo>/tree/main?recursive=1",
+ "models": [
+  {
+   "id": "qwen3-0.6b",
+   "name": "Qwen3 0.6B",
+   "family": "Qwen3",
+   "params": "0.6B",
+   "description_ru": "Самая маленькая модель Qwen3 с переключаемым режимом рассуждений. Запустится почти на любом ПК — для простых вопросов и проверки установки.",
+   "description_en": "The smallest Qwen3 with switchable thinking mode. Runs on almost any PC; good for simple questions and testing the setup.",
+   "tags": [
+    "Chat",
+    "Reasoning",
+    "Multilingual",
+    "Small",
+    "Tools"
+   ],
+   "repo": "Qwen/Qwen3-0.6B-GGUF",
+   "revision": "23749fefcc72300e3a2ad315e1317431b06b590a",
+   "file": "Qwen3-0.6B-Q8_0.gguf",
+   "parts": 1,
+   "size_bytes": 639446688,
+   "quant": "Q8_0",
+   "context": 40960,
+   "license": "apache-2.0",
+   "architecture": "qwen3",
+   "layers": 28,
+   "kv": {
+    "per_token": 114688,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Qwen3-0.6B-Q8_0.gguf",
+     "size": 639446688,
+     "sha256": "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031"
+    }
+   ]
+  },
+  {
+   "id": "qwen3.5-0.8b",
+   "name": "Qwen3.5 0.8B",
+   "family": "Qwen3.5",
+   "params": "0.8B",
+   "description_ru": "Крошечная мультимодальная Qwen3.5: понимает текст и изображения, контекст до 256K токенов. Для слабых ноутбуков.",
+   "description_en": "Tiny multimodal Qwen3.5: understands text and images, up to 256K tokens of context. For low-end laptops.",
+   "tags": [
+    "Chat",
+    "Vision",
+    "Multilingual",
+    "Small",
+    "Tools"
+   ],
+   "repo": "unsloth/Qwen3.5-0.8B-GGUF",
+   "revision": "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0",
+   "file": "Qwen3.5-0.8B-Q8_0.gguf",
+   "parts": 1,
+   "size_bytes": 811843840,
+   "quant": "Q8_0",
+   "context": 262144,
+   "license": "apache-2.0",
+   "architecture": "qwen35",
+   "layers": 24,
+   "kv": {
+    "per_token": 12288,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 20201472
+   },
+   "files": [
+    {
+     "path": "Qwen3.5-0.8B-Q8_0.gguf",
+     "size": 811843840,
+     "sha256": "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c"
+    }
+   ],
+   "mmproj": {
+    "path": "mmproj-F16.gguf",
+    "size": 204987232,
+    "sha256": "56e4c6cfe73b0c82e3e82bc518d7591997e61d81f723fc41a586f4fa69ea2453"
+   }
+  },
+  {
+   "id": "gemma-3-1b",
+   "name": "Gemma 3 1B",
+   "family": "Gemma 3",
+   "params": "1B",
+   "description_ru": "Компактная Gemma 3 от Google для коротких ответов, перевода и черновиков. Очень быстрая даже на CPU.",
+   "description_en": "Compact Google Gemma 3 for short answers, translation and drafts. Very fast even on a CPU.",
+   "tags": [
+    "Chat",
+    "Multilingual",
+    "Small"
+   ],
+   "repo": "ggml-org/gemma-3-1b-it-GGUF",
+   "revision": "f9c28bcd85737ffc5aef028638d3341d49869c27",
+   "file": "gemma-3-1b-it-Q8_0.gguf",
+   "parts": 1,
+   "size_bytes": 1069306368,
+   "quant": "Q8_0",
+   "context": 32768,
+   "license": "gemma",
+   "architecture": "gemma3",
+   "layers": 26,
+   "kv": {
+    "per_token": 4096,
+    "swa_per_token": 22528,
+    "swa_window": 512,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "gemma-3-1b-it-Q8_0.gguf",
+     "size": 1069306368,
+     "sha256": "b205840c5dcef55078e37d344677869a714ffd42a4ae448c48dcfb52e4bb10d5"
+    }
+   ]
+  },
+  {
+   "id": "llama-3.2-1b",
+   "name": "Llama 3.2 1B",
+   "family": "Llama 3.2",
+   "params": "1B",
+   "description_ru": "Лёгкая Llama 3.2 от Meta с контекстом 128K. Подходит для простых задач на скромном железе.",
+   "description_en": "Lightweight Meta Llama 3.2 with a 128K context. Suited to simple tasks on modest hardware.",
+   "tags": [
+    "Chat",
+    "Multilingual",
+    "Small",
+    "Tools"
+   ],
+   "repo": "bartowski/Llama-3.2-1B-Instruct-GGUF",
+   "revision": "067b946cf014b7c697f3654f621d577a3e3afd1c",
+   "file": "Llama-3.2-1B-Instruct-Q8_0.gguf",
+   "parts": 1,
+   "size_bytes": 1321083008,
+   "quant": "Q8_0",
+   "context": 131072,
+   "license": "llama3.2",
+   "architecture": "llama",
+   "layers": 16,
+   "kv": {
+    "per_token": 32768,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Llama-3.2-1B-Instruct-Q8_0.gguf",
+     "size": 1321083008,
+     "sha256": "432f310a77f4650a88d0fd59ecdd7cebed8d684bafea53cbff0473542964f0c3"
+    }
+   ]
+  },
+  {
+   "id": "qwen3-1.7b",
+   "name": "Qwen3 1.7B",
+   "family": "Qwen3",
+   "params": "1.7B",
+   "description_ru": "Небольшая Qwen3 с режимом рассуждений и вызовом инструментов. Заметно умнее версии 0.6B при скромных требованиях.",
+   "description_en": "Small Qwen3 with thinking mode and tool calling. Noticeably smarter than 0.6B at modest requirements.",
+   "tags": [
+    "Chat",
+    "Reasoning",
+    "Tools",
+    "Multilingual",
+    "Small"
+   ],
+   "repo": "Qwen/Qwen3-1.7B-GGUF",
+   "revision": "90862c4b9d2787eaed51d12237eafdfe7c5f6077",
+   "file": "Qwen3-1.7B-Q8_0.gguf",
+   "parts": 1,
+   "size_bytes": 1834426016,
+   "quant": "Q8_0",
+   "context": 40960,
+   "license": "apache-2.0",
+   "architecture": "qwen3",
+   "layers": 28,
+   "kv": {
+    "per_token": 114688,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Qwen3-1.7B-Q8_0.gguf",
+     "size": 1834426016,
+     "sha256": "061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a"
+    }
+   ]
+  },
+  {
+   "id": "llama-3.2-3b",
+   "name": "Llama 3.2 3B",
+   "family": "Llama 3.2",
+   "params": "3B",
+   "description_ru": "Llama 3.2 3B от Meta: быстрый универсальный помощник с контекстом 128K и вызовом инструментов.",
+   "description_en": "Meta's Llama 3.2 3B: a fast general assistant with a 128K context and tool calling.",
+   "tags": [
+    "Chat",
+    "Tools",
+    "Multilingual",
+    "Small"
+   ],
+   "repo": "bartowski/Llama-3.2-3B-Instruct-GGUF",
+   "revision": "5ab33fa94d1d04e903623ae72c95d1696f09f9e8",
+   "file": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 2019377696,
+   "quant": "Q4_K_M",
+   "context": 131072,
+   "license": "llama3.2",
+   "architecture": "llama",
+   "layers": 28,
+   "kv": {
+    "per_token": 114688,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+     "size": 2019377696,
+     "sha256": "6c1a2b41161032677be168d354123594c0e6e67d2b9227c84f296ad037c728ff"
+    }
+   ]
+  },
+  {
+   "id": "phi-4-mini",
+   "name": "Phi-4 mini",
+   "family": "Phi-4",
+   "params": "3.8B",
+   "description_ru": "Phi-4-mini от Microsoft: сильна в математике и логике для своего размера, контекст 128K.",
+   "description_en": "Microsoft's Phi-4-mini: strong at math and logic for its size, 128K context.",
+   "tags": [
+    "Chat",
+    "Reasoning",
+    "Small",
+    "Tools"
+   ],
+   "repo": "unsloth/Phi-4-mini-instruct-GGUF",
+   "revision": "78eb92a46fc37e6b524df991ed9aca9bc6aa7b80",
+   "file": "Phi-4-mini-instruct-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 2491874272,
+   "quant": "Q4_K_M",
+   "context": 131072,
+   "license": "mit",
+   "architecture": "phi3",
+   "layers": 32,
+   "kv": {
+    "per_token": 131072,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Phi-4-mini-instruct-Q4_K_M.gguf",
+     "size": 2491874272,
+     "sha256": "88c00229914083cd112853aab84ed51b87bdf6b9ce42f532d8c85c7c63b1730a"
+    }
+   ]
+  },
+  {
+   "id": "qwen3-4b-2507",
+   "name": "Qwen3 4B Instruct 2507",
+   "family": "Qwen3",
+   "params": "4B",
+   "description_ru": "Обновлённая Qwen3 4B (июль 2025) без режима рассуждений: быстрые ответы, вызов инструментов, контекст 256K.",
+   "description_en": "Updated Qwen3 4B (July 2025) without thinking mode: fast answers, tool calling, 256K context.",
+   "tags": [
+    "Chat",
+    "Tools",
+    "Multilingual",
+    "Small"
+   ],
+   "repo": "unsloth/Qwen3-4B-Instruct-2507-GGUF",
+   "revision": "a06e946bb6b655725eafa393f4a9745d460374c9",
+   "file": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 2497281120,
+   "quant": "Q4_K_M",
+   "context": 262144,
+   "license": "apache-2.0",
+   "architecture": "qwen3",
+   "layers": 36,
+   "kv": {
+    "per_token": 147456,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+     "size": 2497281120,
+     "sha256": "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597"
+    }
+   ]
+  },
+  {
+   "id": "qwen3.5-4b",
+   "name": "Qwen3.5 4B",
+   "family": "Qwen3.5",
+   "params": "4B",
+   "description_ru": "Qwen3.5 4B: мультимодальная модель с рассуждениями и инструментами; гибридное внимание экономит память на длинном контексте.",
+   "description_en": "Qwen3.5 4B: multimodal, with reasoning and tools; hybrid attention keeps memory low on long contexts.",
+   "tags": [
+    "Chat",
+    "Reasoning",
+    "Tools",
+    "Vision",
+    "Multilingual"
+   ],
+   "repo": "unsloth/Qwen3.5-4B-GGUF",
+   "revision": "e87f176479d0855a907a41277aca2f8ee7a09523",
+   "file": "Qwen3.5-4B-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 2740937888,
+   "quant": "Q4_K_M",
+   "context": 262144,
+   "license": "apache-2.0",
+   "architecture": "qwen35",
+   "layers": 32,
+   "kv": {
+    "per_token": 32768,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 52690944
+   },
+   "files": [
+    {
+     "path": "Qwen3.5-4B-Q4_K_M.gguf",
+     "size": 2740937888,
+     "sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4"
+    }
+   ],
+   "mmproj": {
+    "path": "mmproj-F16.gguf",
+    "size": 672423616,
+    "sha256": "cd88edcf8d031894960bb0c9c5b9b7e1fea6ebee02b9f7ce925a00d12891f864"
+   }
+  },
+  {
+   "id": "gemma-4-e2b",
+   "name": "Gemma 4 E2B",
+   "family": "Gemma 4",
+   "params": "E2B",
+   "description_ru": "Gemma 4 E2B от Google — эффективная модель для слабых устройств: понимает текст и изображения, хорошо владеет многими языками.",
+   "description_en": "Google's Gemma 4 E2B, an efficient model for low-end devices: understands text and images, strong in many languages.",
+   "tags": [
+    "Chat",
+    "Vision",
+    "Multilingual",
+    "Small",
+    "Tools"
+   ],
+   "repo": "unsloth/gemma-4-E2B-it-GGUF",
+   "revision": "0314792d7f1f7e229411f620751375812bb9faf2",
+   "file": "gemma-4-E2B-it-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 3106738272,
+   "quant": "Q4_K_M",
+   "context": 131072,
+   "license": "apache-2.0",
+   "architecture": "gemma4",
+   "layers": 35,
+   "kv": {
+    "per_token": 6144,
+    "swa_per_token": 12288,
+    "swa_window": 512,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "gemma-4-E2B-it-Q4_K_M.gguf",
+     "size": 3106738272,
+     "sha256": "740185b21d22ceb83a11c3aa62ad5842ef32c70f6096d756bbee85a1e4ec34b8"
+    }
+   ],
+   "mmproj": {
+    "path": "mmproj-F16.gguf",
+    "size": 985654080,
+    "sha256": "140be8d7849741f88c50757d529b84373ee8e27052cc2236855b537f4a8215fa"
+   }
+  },
+  {
+   "id": "gemma-4-e4b",
+   "name": "Gemma 4 E4B",
+   "family": "Gemma 4",
+   "params": "E4B",
+   "description_ru": "Gemma 4 E4B: заметно сильнее E2B при умеренных требованиях к памяти; работает с текстом и изображениями.",
+   "description_en": "Gemma 4 E4B: noticeably stronger than E2B at a moderate memory cost; works with text and images.",
+   "tags": [
+    "Chat",
+    "Vision",
+    "Multilingual",
+    "Tools"
+   ],
+   "repo": "unsloth/gemma-4-E4B-it-GGUF",
+   "revision": "bfc15c382204943c3a8fff0c750b94ae2364d7a3",
+   "file": "gemma-4-E4B-it-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 4977171584,
+   "quant": "Q4_K_M",
+   "context": 131072,
+   "license": "apache-2.0",
+   "architecture": "gemma4",
+   "layers": 42,
+   "kv": {
+    "per_token": 16384,
+    "swa_per_token": 40960,
+    "swa_window": 512,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "gemma-4-E4B-it-Q4_K_M.gguf",
+     "size": 4977171584,
+     "sha256": "85a896a047553e842f25297ee5b031d64ff30147d9c4af17b1e4b394cd1fab87"
+    }
+   ],
+   "mmproj": {
+    "path": "mmproj-F16.gguf",
+    "size": 990372672,
+    "sha256": "ddf46c21d7078e95338cfc22306b19b276a29a5ad089023449dd54d4b6170a51"
+   }
+  },
+  {
+   "id": "qwen3-8b",
+   "name": "Qwen3 8B",
+   "family": "Qwen3",
+   "params": "8B",
+   "description_ru": "Qwen3 8B — популярная универсальная модель с режимом рассуждений и вызовом инструментов.",
+   "description_en": "Qwen3 8B, a popular all-round model with thinking mode and tool calling.",
+   "tags": [
+    "Chat",
+    "Reasoning",
+    "Tools",
+    "Multilingual"
+   ],
+   "repo": "Qwen/Qwen3-8B-GGUF",
+   "revision": "7c41481f57cb95916b40956ab2f0b139b296d974",
+   "file": "Qwen3-8B-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 5027783488,
+   "quant": "Q4_K_M",
+   "context": 40960,
+   "license": "apache-2.0",
+   "architecture": "qwen3",
+   "layers": 36,
+   "kv": {
+    "per_token": 147456,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Qwen3-8B-Q4_K_M.gguf",
+     "size": 5027783488,
+     "sha256": "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785"
+    }
+   ]
+  },
+  {
+   "id": "llama-3.1-8b",
+   "name": "Llama 3.1 8B",
+   "family": "Llama 3.1",
+   "params": "8B",
+   "description_ru": "Llama 3.1 8B от Meta: проверенная временем модель для диалога и инструментов, контекст 128K.",
+   "description_en": "Meta's Llama 3.1 8B: a time-tested model for chat and tools, 128K context.",
+   "tags": [
+    "Chat",
+    "Tools",
+    "Multilingual"
+   ],
+   "repo": "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+   "revision": "bf5b95e96dac0462e2a09145ec66cae9a3f12067",
+   "file": "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 4920739232,
+   "quant": "Q4_K_M",
+   "context": 131072,
+   "license": "llama3.1",
+   "architecture": "llama",
+   "layers": 32,
+   "kv": {
+    "per_token": 131072,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+     "size": 4920739232,
+     "sha256": "7b064f5842bf9532c91456deda288a1b672397a54fa729aa665952863033557c"
+    }
+   ]
+  },
+  {
+   "id": "deepseek-r1-0528-qwen3-8b",
+   "name": "DeepSeek-R1-0528 Qwen3 8B",
+   "family": "DeepSeek-R1",
+   "params": "8B",
+   "description_ru": "Дистилляция DeepSeek-R1-0528 в Qwen3 8B: подробные цепочки рассуждений для математики и логики.",
+   "description_en": "DeepSeek-R1-0528 distilled into Qwen3 8B: detailed reasoning chains for math and logic.",
+   "tags": [
+    "Reasoning",
+    "Chat",
+    "Tools"
+   ],
+   "repo": "unsloth/DeepSeek-R1-0528-Qwen3-8B-GGUF",
+   "revision": "eb48357c179d34dbf515983f798dfb8752a0f261",
+   "file": "DeepSeek-R1-0528-Qwen3-8B-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 5027785216,
+   "quant": "Q4_K_M",
+   "context": 131072,
+   "license": "mit",
+   "architecture": "qwen3",
+   "layers": 36,
+   "kv": {
+    "per_token": 147456,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "DeepSeek-R1-0528-Qwen3-8B-Q4_K_M.gguf",
+     "size": 5027785216,
+     "sha256": "a86349a4180c4e6bb43f874c29c404fa2be3f90b15509bd6d86f697dba724ec1"
+    }
+   ]
+  },
+  {
+   "id": "qwen2.5-coder-7b",
+   "name": "Qwen2.5-Coder 7B",
+   "family": "Qwen2.5-Coder",
+   "params": "7B",
+   "description_ru": "Qwen2.5-Coder 7B — модель для программирования: пишет, объясняет и исправляет код.",
+   "description_en": "Qwen2.5-Coder 7B, a programming model: writes, explains and fixes code.",
+   "tags": [
+    "Code",
+    "Tools"
+   ],
+   "repo": "Qwen/Qwen2.5-Coder-7B-Instruct-GGUF",
+   "revision": "13fb94bfda8c8cf22497dc57b78f391a9acb426a",
+   "file": "qwen2.5-coder-7b-instruct-q4_k_m.gguf",
+   "parts": 1,
+   "size_bytes": 4683073536,
+   "quant": "Q4_K_M",
+   "context": 131072,
+   "license": "apache-2.0",
+   "architecture": "qwen2",
+   "layers": 28,
+   "kv": {
+    "per_token": 57344,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "qwen2.5-coder-7b-instruct-q4_k_m.gguf",
+     "size": 4683073536,
+     "sha256": "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c"
+    }
+   ]
+  },
+  {
+   "id": "qwen3.5-9b",
+   "name": "Qwen3.5 9B",
+   "family": "Qwen3.5",
+   "params": "9B",
+   "description_ru": "Qwen3.5 9B: сильная мультимодальная модель среднего размера с рассуждениями, инструментами и контекстом 256K.",
+   "description_en": "Qwen3.5 9B: a strong mid-size multimodal model with reasoning, tools and a 256K context.",
+   "tags": [
+    "Chat",
+    "Reasoning",
+    "Tools",
+    "Vision",
+    "Code",
+    "Multilingual"
+   ],
+   "repo": "unsloth/Qwen3.5-9B-GGUF",
+   "revision": "3885219b6810b007914f3a7950a8d1b469d598a5",
+   "file": "Qwen3.5-9B-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 5680522464,
+   "quant": "Q4_K_M",
+   "context": 262144,
+   "license": "apache-2.0",
+   "architecture": "qwen35",
+   "layers": 32,
+   "kv": {
+    "per_token": 32768,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 52690944
+   },
+   "files": [
+    {
+     "path": "Qwen3.5-9B-Q4_K_M.gguf",
+     "size": 5680522464,
+     "sha256": "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8"
+    }
+   ],
+   "mmproj": {
+    "path": "mmproj-F16.gguf",
+    "size": 918166080,
+    "sha256": "f70dc3509053962b0d0d3ee8a7eacebf5d60aa560cad78254ae8698516ae029f"
+   }
+  },
+  {
+   "id": "gemma-4-12b",
+   "name": "Gemma 4 12B",
+   "family": "Gemma 4",
+   "params": "12B",
+   "description_ru": "Gemma 4 12B: качественные ответы, понимание изображений и длинный контекст до 256K.",
+   "description_en": "Gemma 4 12B: high-quality answers, image understanding and a long context of up to 256K.",
+   "tags": [
+    "Chat",
+    "Vision",
+    "Multilingual",
+    "Tools"
+   ],
+   "repo": "unsloth/gemma-4-12b-it-GGUF",
+   "revision": "fc034cfff751157913579611efad8462ac1be606",
+   "file": "gemma-4-12b-it-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 7121861440,
+   "quant": "Q4_K_M",
+   "context": 262144,
+   "license": "apache-2.0",
+   "architecture": "gemma4",
+   "layers": 48,
+   "kv": {
+    "per_token": 16384,
+    "swa_per_token": 327680,
+    "swa_window": 1024,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "gemma-4-12b-it-Q4_K_M.gguf",
+     "size": 7121861440,
+     "sha256": "0a270ec9fe6b34f4a0d33992b6135117b484ebc4766ab76b51d4ae8c457e4c42"
+    }
+   ],
+   "mmproj": {
+    "path": "mmproj-F16.gguf",
+    "size": 175115840,
+    "sha256": "91f086971e56d7a7d8d39e271873fccdb49541bd259d6e02c401a4f1cb7a219e"
+   }
+  },
+  {
+   "id": "ministral-3-14b",
+   "name": "Ministral 3 14B",
+   "family": "Ministral 3",
+   "params": "14B",
+   "description_ru": "Ministral 3 14B от Mistral AI (декабрь 2025): универсальная модель с поддержкой изображений и инструментов.",
+   "description_en": "Mistral AI's Ministral 3 14B (December 2025): a general model with image and tool support.",
+   "tags": [
+    "Chat",
+    "Vision",
+    "Tools",
+    "Multilingual"
+   ],
+   "repo": "mistralai/Ministral-3-14B-Instruct-2512-GGUF",
+   "revision": "74fac473c43357d7fb2671713608183cc72496d0",
+   "file": "Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 8239593024,
+   "quant": "Q4_K_M",
+   "context": 262144,
+   "license": "apache-2.0",
+   "architecture": "mistral3",
+   "layers": 40,
+   "kv": {
+    "per_token": 163840,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
+     "size": 8239593024,
+     "sha256": "824e0f3373e69b84f2cae46fdcb9bd1ebc6ab3bfc7acc125d818b7b8178cc613"
+    }
+   ],
+   "mmproj": {
+    "path": "Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf",
+    "size": 879258784,
+    "sha256": "ab7616148b7081030fd38e410c9213ce8346a8b0588291c8ca279058e78cfae7"
+   }
+  },
+  {
+   "id": "qwen3-14b",
+   "name": "Qwen3 14B",
+   "family": "Qwen3",
+   "params": "14B",
+   "description_ru": "Qwen3 14B: более глубокие рассуждения и знания, чем у 8B, при всё ещё разумных требованиях.",
+   "description_en": "Qwen3 14B: deeper reasoning and knowledge than 8B at still reasonable requirements.",
+   "tags": [
+    "Chat",
+    "Reasoning",
+    "Tools",
+    "Multilingual"
+   ],
+   "repo": "Qwen/Qwen3-14B-GGUF",
+   "revision": "530227a7d994db8eca5ab5ced2fb692b614357fd",
+   "file": "Qwen3-14B-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 9001752960,
+   "quant": "Q4_K_M",
+   "context": 40960,
+   "license": "apache-2.0",
+   "architecture": "qwen3",
+   "layers": 40,
+   "kv": {
+    "per_token": 163840,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Qwen3-14B-Q4_K_M.gguf",
+     "size": 9001752960,
+     "sha256": "500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0"
+    }
+   ]
+  },
+  {
+   "id": "phi-4",
+   "name": "Phi-4 14B",
+   "family": "Phi-4",
+   "params": "14B",
+   "description_ru": "Phi-4 от Microsoft: сильна в математике, логике и коде; родной контекст 16K.",
+   "description_en": "Microsoft's Phi-4: strong at math, logic and code; native 16K context.",
+   "tags": [
+    "Chat",
+    "Reasoning",
+    "Code"
+   ],
+   "repo": "bartowski/phi-4-GGUF",
+   "revision": "19cd65f97c2f1712a81c506611d3f9c94b16a1e1",
+   "file": "phi-4-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 9053114816,
+   "quant": "Q4_K_M",
+   "context": 16384,
+   "license": "mit",
+   "architecture": "phi3",
+   "layers": 40,
+   "kv": {
+    "per_token": 204800,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "phi-4-Q4_K_M.gguf",
+     "size": 9053114816,
+     "sha256": "009aba717c09d4a35890c7d35eb59d54e1dba884c7c526e7197d9c13ab5911d9"
+    }
+   ]
+  },
+  {
+   "id": "gpt-oss-20b",
+   "name": "gpt-oss 20B",
+   "family": "gpt-oss",
+   "params": "21B-A3.6B",
+   "description_ru": "Открытая MoE-модель OpenAI: быстрые рассуждения с настраиваемым усилием и вызов инструментов.",
+   "description_en": "OpenAI's open-weight MoE model: fast reasoning with adjustable effort and tool calling.",
+   "tags": [
+    "Reasoning",
+    "Tools",
+    "Code",
+    "Chat"
+   ],
+   "repo": "ggml-org/gpt-oss-20b-GGUF",
+   "revision": "15dcfc7e7c608c6161507211ed43c5b590801b4b",
+   "file": "gpt-oss-20b-MXFP4.gguf",
+   "parts": 1,
+   "size_bytes": 12109566624,
+   "quant": "MXFP4",
+   "context": 131072,
+   "license": "apache-2.0",
+   "architecture": "gpt-oss",
+   "layers": 24,
+   "kv": {
+    "per_token": 24576,
+    "swa_per_token": 24576,
+    "swa_window": 128,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "gpt-oss-20b-MXFP4.gguf",
+     "size": 12109566624,
+     "sha256": "27cd6c432c7672cb812a92f611cf3ba7bbc35928262bb1e1253ff4ee6ae35901"
+    }
+   ]
+  },
+  {
+   "id": "mistral-small-3.2-24b",
+   "name": "Mistral Small 3.2 24B",
+   "family": "Mistral Small",
+   "params": "24B",
+   "description_ru": "Mistral Small 3.2 24B: сбалансированная модель с поддержкой изображений и надёжным вызовом инструментов.",
+   "description_en": "Mistral Small 3.2 24B: a balanced model with image support and reliable tool calling.",
+   "tags": [
+    "Chat",
+    "Vision",
+    "Tools",
+    "Multilingual"
+   ],
+   "repo": "unsloth/Mistral-Small-3.2-24B-Instruct-2506-GGUF",
+   "revision": "b750ec2299225e492f1bd27cab88a0a595fa848f",
+   "file": "Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 14333922848,
+   "quant": "Q4_K_M",
+   "context": 131072,
+   "license": "apache-2.0",
+   "architecture": "llama",
+   "layers": 40,
+   "kv": {
+    "per_token": 163840,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+     "size": 14333922848,
+     "sha256": "a3cc56310807ed0d145eaf9f018ccda9ae7ad8edb41ec870aa2454b0d4700b3c"
+    }
+   ],
+   "mmproj": {
+    "path": "mmproj-F16.gguf",
+    "size": 878053568,
+    "sha256": "d6af684ae9136398eaa0b59ea9e0b0b850bb6ac5084f1e8c5cb8f85251825eaf"
+   }
+  },
+  {
+   "id": "devstral-small-2-24b",
+   "name": "Devstral Small 2 24B",
+   "family": "Devstral",
+   "params": "24B",
+   "description_ru": "Devstral Small 2 от Mistral AI — модель для агентного программирования: работа с репозиторием через инструменты.",
+   "description_en": "Mistral AI's Devstral Small 2, built for agentic coding: works across a repository through tools.",
+   "tags": [
+    "Code",
+    "Tools"
+   ],
+   "repo": "lmstudio-community/Devstral-Small-2-24B-Instruct-2512-GGUF",
+   "revision": "e471f62bf546b027d9f23f679bcd1a295eabf403",
+   "file": "Devstral-Small-2-24B-Instruct-2512-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 14334437504,
+   "quant": "Q4_K_M",
+   "context": 393216,
+   "license": "apache-2.0",
+   "architecture": "mistral3",
+   "layers": 40,
+   "kv": {
+    "per_token": 163840,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Devstral-Small-2-24B-Instruct-2512-Q4_K_M.gguf",
+     "size": 14334437504,
+     "sha256": "fd9c29aee820b5db745434d43329e8803a72fc27e4261b661df8309c16bcde8c"
+    }
+   ]
+  },
+  {
+   "id": "gemma-4-26b-a4b",
+   "name": "Gemma 4 26B-A4B",
+   "family": "Gemma 4",
+   "params": "26B-A4B",
+   "description_ru": "Gemma 4 26B-A4B — смесь экспертов: качество крупной модели при скорости около 4B активных параметров.",
+   "description_en": "Gemma 4 26B-A4B, a mixture of experts: large-model quality at the speed of about 4B active parameters.",
+   "tags": [
+    "Chat",
+    "Vision",
+    "Multilingual",
+    "Tools"
+   ],
+   "repo": "unsloth/gemma-4-26B-A4B-it-GGUF",
+   "revision": "c099eb48e663fd284577b04978a94ffccb261841",
+   "file": "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 16947541728,
+   "quant": "UD-Q4_K_M",
+   "context": 262144,
+   "license": "apache-2.0",
+   "architecture": "gemma4",
+   "layers": 30,
+   "kv": {
+    "per_token": 20480,
+    "swa_per_token": 204800,
+    "swa_window": 1024,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
+     "size": 16947541728,
+     "sha256": "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f"
+    }
+   ],
+   "mmproj": {
+    "path": "mmproj-F16.gguf",
+    "size": 1193058784,
+    "sha256": "418a6d8723067cd712235facbbc5cba6c8fbbd413fc1292d2aace5a027d5a42f"
+   }
+  },
+  {
+   "id": "qwen3-coder-30b-a3b",
+   "name": "Qwen3-Coder 30B-A3B",
+   "family": "Qwen3-Coder",
+   "params": "30B-A3B",
+   "description_ru": "Qwen3-Coder 30B-A3B — быстрая MoE-модель для кода и агентной работы с инструментами, контекст 256K.",
+   "description_en": "Qwen3-Coder 30B-A3B, a fast MoE model for code and agentic tool use, 256K context.",
+   "tags": [
+    "Code",
+    "Tools"
+   ],
+   "repo": "unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF",
+   "revision": "b17cb02dd882d5b6ab62fc777ad2995f19668350",
+   "file": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 18556689568,
+   "quant": "Q4_K_M",
+   "context": 262144,
+   "license": "apache-2.0",
+   "architecture": "qwen3moe",
+   "layers": 48,
+   "kv": {
+    "per_token": 98304,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+     "size": 18556689568,
+     "sha256": "fadc3e5f8d42bf7e894a785b05082e47daee4df26680389817e2093056f088ad"
+    }
+   ]
+  },
+  {
+   "id": "glm-4.7-flash",
+   "name": "GLM-4.7 Flash",
+   "family": "GLM",
+   "params": "30B-A3B",
+   "description_ru": "GLM-4.7-Flash от Z.ai: лёгкая MoE-модель с рассуждениями, сильная в коде и агентных задачах.",
+   "description_en": "Z.ai's GLM-4.7-Flash: a light MoE model with reasoning, strong at code and agentic tasks.",
+   "tags": [
+    "Chat",
+    "Reasoning",
+    "Code",
+    "Tools"
+   ],
+   "repo": "unsloth/GLM-4.7-Flash-GGUF",
+   "revision": "0d32489ecb9db6d2a4fc93bd27ef01519f95474d",
+   "file": "GLM-4.7-Flash-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 18312339808,
+   "quant": "Q4_K_M",
+   "context": 202752,
+   "license": "mit",
+   "architecture": "deepseek2",
+   "layers": 47,
+   "kv": {
+    "per_token": 102272,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "GLM-4.7-Flash-Q4_K_M.gguf",
+     "size": 18312339808,
+     "sha256": "29837ed2c0fc5f51981adf8ac8083fcf80743c598381f13e9f06cbad0498b174"
+    }
+   ]
+  },
+  {
+   "id": "qwen3.6-35b-a3b",
+   "name": "Qwen3.6 35B-A3B",
+   "family": "Qwen3.6",
+   "params": "35B-A3B",
+   "description_ru": "Qwen3.6 35B-A3B — быстрая мультимодальная MoE-модель с рассуждениями и инструментами, экономная по памяти на длинном контексте.",
+   "description_en": "Qwen3.6 35B-A3B, a fast multimodal MoE model with reasoning and tools, memory-efficient on long contexts.",
+   "tags": [
+    "Chat",
+    "Reasoning",
+    "Tools",
+    "Vision",
+    "Code",
+    "Multilingual"
+   ],
+   "repo": "ggml-org/Qwen3.6-35B-A3B-GGUF",
+   "revision": "eb0b3cc97fecddab7eee6e6ffdbe92d2a00afcea",
+   "file": "Qwen3.6-35B-A3B-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 20542732576,
+   "quant": "Q4_K_M",
+   "context": 262144,
+   "license": "apache-2.0",
+   "architecture": "qwen35moe",
+   "layers": 40,
+   "kv": {
+    "per_token": 20480,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 65863680
+   },
+   "files": [
+    {
+     "path": "Qwen3.6-35B-A3B-Q4_K_M.gguf",
+     "size": 20542732576,
+     "sha256": "f4ffe03c9139e6a905a5d346f77d9fabdd179367c3280dfd005d1e75ca5ed8c8"
+    }
+   ],
+   "mmproj": {
+    "path": "mmproj-Qwen3.6-35B-A3B-Q8_0.gguf",
+    "size": 614194304,
+    "sha256": "904cbf8c8e876220066ab3bf676c7efa40f3da372276fdaf8b01d2fb2a37a51d"
+   }
+  },
+  {
+   "id": "qwen3.8-27b",
+   "name": "Qwen3.8 27B",
+   "family": "Qwen3.8",
+   "params": "27B",
+   "description_ru": "Плотная Qwen3.8 27B: рассуждения, код, инструменты и изображения, контекст 256K.",
+   "description_en": "Dense Qwen3.8 27B: reasoning, code, tools and images, 256K context.",
+   "tags": [
+    "Chat",
+    "Reasoning",
+    "Tools",
+    "Vision",
+    "Code",
+    "Multilingual"
+   ],
+   "repo": "unsloth/Qwen3.8-27B-GGUF",
+   "revision": "4ca720788d1e01f1bff70c033e0d0028fd02e502",
+   "file": "Qwen3.8-27B-UD-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 16464440224,
+   "quant": "UD-Q4_K_M",
+   "context": 262144,
+   "license": "apache-2.0",
+   "architecture": "qwen35",
+   "layers": 65,
+   "kv": {
+    "per_token": 65536,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 160161792
+   },
+   "files": [
+    {
+     "path": "Qwen3.8-27B-UD-Q4_K_M.gguf",
+     "size": 16464440224,
+     "sha256": "322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482"
+    }
+   ],
+   "mmproj": {
+    "path": "mmproj-F16.gguf",
+    "size": 927607488,
+    "sha256": "cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e"
+   }
+  },
+  {
+   "id": "qwen3-32b",
+   "name": "Qwen3 32B",
+   "family": "Qwen3",
+   "params": "32B",
+   "description_ru": "Qwen3 32B — крупнейшая плотная модель Qwen3: глубокие рассуждения и широкие знания.",
+   "description_en": "Qwen3 32B, the largest dense Qwen3: deep reasoning and broad knowledge.",
+   "tags": [
+    "Chat",
+    "Reasoning",
+    "Tools",
+    "Code",
+    "Multilingual"
+   ],
+   "repo": "Qwen/Qwen3-32B-GGUF",
+   "revision": "938a7432affaec9157f883a87164e2646ae17555",
+   "file": "Qwen3-32B-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 19762149024,
+   "quant": "Q4_K_M",
+   "context": 40960,
+   "license": "apache-2.0",
+   "architecture": "qwen3",
+   "layers": 64,
+   "kv": {
+    "per_token": 262144,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Qwen3-32B-Q4_K_M.gguf",
+     "size": 19762149024,
+     "sha256": "efd971561896866f0e910cce52761ca77b1b138090c7f15fe284676d57d1f689"
+    }
+   ]
+  },
+  {
+   "id": "qwen2.5-coder-32b",
+   "name": "Qwen2.5-Coder 32B",
+   "family": "Qwen2.5-Coder",
+   "params": "32B",
+   "description_ru": "Qwen2.5-Coder 32B — флагман Qwen2.5 для программирования: генерация и исправление кода на многих языках.",
+   "description_en": "Qwen2.5-Coder 32B, the flagship Qwen2.5 coding model: code generation and repair in many languages.",
+   "tags": [
+    "Code",
+    "Tools"
+   ],
+   "repo": "Qwen/Qwen2.5-Coder-32B-Instruct-GGUF",
+   "revision": "9d3053fce650fe1cdbdb75998c2a87add9d178ef",
+   "file": "qwen2.5-coder-32b-instruct-q4_k_m.gguf",
+   "parts": 1,
+   "size_bytes": 19851335872,
+   "quant": "Q4_K_M",
+   "context": 131072,
+   "license": "apache-2.0",
+   "architecture": "qwen2",
+   "layers": 64,
+   "kv": {
+    "per_token": 262144,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "qwen2.5-coder-32b-instruct-q4_k_m.gguf",
+     "size": 19851335872,
+     "sha256": "4d64b316b5e6319d9613e0d97935d9ebd631fc7e334da400d00085eca749d085"
+    }
+   ]
+  },
+  {
+   "id": "llama-3.3-70b",
+   "name": "Llama 3.3 70B",
+   "family": "Llama 3.3",
+   "params": "70B",
+   "description_ru": "Llama 3.3 70B от Meta: качество уровня крупных моделей для диалога и инструментов, контекст 128K.",
+   "description_en": "Meta's Llama 3.3 70B: large-model quality for chat and tools, 128K context.",
+   "tags": [
+    "Chat",
+    "Tools",
+    "Multilingual"
+   ],
+   "repo": "bartowski/Llama-3.3-70B-Instruct-GGUF",
+   "revision": "b6c5c9f176f3279204034e1d16d393105e95cb88",
+   "file": "Llama-3.3-70B-Instruct-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 42520398816,
+   "quant": "Q4_K_M",
+   "context": 131072,
+   "license": "llama3.3",
+   "architecture": "llama",
+   "layers": 80,
+   "kv": {
+    "per_token": 327680,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Llama-3.3-70B-Instruct-Q4_K_M.gguf",
+     "size": 42520398816,
+     "sha256": "32df3baccb556f9840059b2528b2dee4d3d516b24afdfb9d0c56ff5f63e3a664"
+    }
+   ]
+  },
+  {
+   "id": "qwen2.5-72b",
+   "name": "Qwen2.5 72B",
+   "family": "Qwen2.5",
+   "params": "72B",
+   "description_ru": "Qwen2.5 72B — крупная универсальная модель с сильными знаниями, кодом и многоязычностью.",
+   "description_en": "Qwen2.5 72B, a large general model with strong knowledge, coding and multilingual skills.",
+   "tags": [
+    "Chat",
+    "Code",
+    "Tools",
+    "Multilingual"
+   ],
+   "repo": "bartowski/Qwen2.5-72B-Instruct-GGUF",
+   "revision": "d43fd973131bce821f41e2df3c78c6fe15c5627a",
+   "file": "Qwen2.5-72B-Instruct-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 47415715488,
+   "quant": "Q4_K_M",
+   "context": 32768,
+   "license": "qwen",
+   "architecture": "qwen2",
+   "layers": 80,
+   "kv": {
+    "per_token": 327680,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Qwen2.5-72B-Instruct-Q4_K_M.gguf",
+     "size": 47415715488,
+     "sha256": "e4c8fad16946be8cf0bbf67eb8f4e18fc7415a5a6d2854b4cda453edb4082545"
+    }
+   ]
+  },
+  {
+   "id": "qwen3-coder-next",
+   "name": "Qwen3-Coder-Next",
+   "family": "Qwen3-Coder",
+   "params": "80B-A3B",
+   "description_ru": "Qwen3-Coder-Next — MoE-модель 80B-A3B для агентного программирования: быстрая генерация при большом объёме знаний.",
+   "description_en": "Qwen3-Coder-Next, an 80B-A3B MoE for agentic coding: fast generation backed by a large knowledge base.",
+   "tags": [
+    "Code",
+    "Tools"
+   ],
+   "repo": "unsloth/Qwen3-Coder-Next-GGUF",
+   "revision": "ce09c67b53bc8739eef83fe67b2f5d293c270632",
+   "file": "Qwen3-Coder-Next-Q4_K_M.gguf",
+   "parts": 1,
+   "size_bytes": 48528320544,
+   "quant": "Q4_K_M",
+   "context": 262144,
+   "license": "apache-2.0",
+   "architecture": "qwen3next",
+   "layers": 48,
+   "kv": {
+    "per_token": 24576,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 79036416
+   },
+   "files": [
+    {
+     "path": "Qwen3-Coder-Next-Q4_K_M.gguf",
+     "size": 48528320544,
+     "sha256": "9e6032d2f3b50a60f17ce8bf5a1d85c71af9b53b89c7978020ae7c660f29b090"
+    }
+   ]
+  },
+  {
+   "id": "gpt-oss-120b",
+   "name": "gpt-oss 120B",
+   "family": "gpt-oss",
+   "params": "117B-A5.1B",
+   "description_ru": "Старшая открытая MoE-модель OpenAI: сильные рассуждения с настраиваемым усилием и работа с инструментами.",
+   "description_en": "OpenAI's larger open-weight MoE model: strong reasoning with adjustable effort and tool use.",
+   "tags": [
+    "Reasoning",
+    "Tools",
+    "Code",
+    "Chat"
+   ],
+   "repo": "ggml-org/gpt-oss-120b-GGUF",
+   "revision": "7200b74bea78b0a2964ef9f3897eefa401e890ff",
+   "file": "gpt-oss-120b-MXFP4.gguf",
+   "parts": 1,
+   "size_bytes": 63387346208,
+   "quant": "MXFP4",
+   "context": 131072,
+   "license": "apache-2.0",
+   "architecture": "gpt-oss",
+   "layers": 36,
+   "kv": {
+    "per_token": 36864,
+    "swa_per_token": 36864,
+    "swa_window": 128,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "gpt-oss-120b-MXFP4.gguf",
+     "size": 63387346208,
+     "sha256": "582bd40f6886200101f4c4ed9f25f3fe80cc14c86e9e2b37746cd8904a0c622d"
+    }
+   ]
+  },
+  {
+   "id": "glm-4.5-air",
+   "name": "GLM-4.5-Air",
+   "family": "GLM",
+   "params": "106B-A12B",
+   "description_ru": "GLM-4.5-Air от Z.ai: MoE-модель 106B-A12B с гибридными рассуждениями, сильная в коде и агентных задачах.",
+   "description_en": "Z.ai's GLM-4.5-Air: a 106B-A12B MoE with hybrid reasoning, strong at code and agentic tasks.",
+   "tags": [
+    "Chat",
+    "Reasoning",
+    "Code",
+    "Tools"
+   ],
+   "repo": "unsloth/GLM-4.5-Air-GGUF",
+   "revision": "506d64aa8c5cfe9dbbf00bc7a15739438f83204d",
+   "file": "Q4_K_M/GLM-4.5-Air-Q4_K_M-00001-of-00002.gguf",
+   "parts": 2,
+   "size_bytes": 72975748384,
+   "quant": "Q4_K_M",
+   "context": 131072,
+   "license": "mit",
+   "architecture": "glm4moe",
+   "layers": 47,
+   "kv": {
+    "per_token": 192512,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Q4_K_M/GLM-4.5-Air-Q4_K_M-00001-of-00002.gguf",
+     "size": 50000746752,
+     "sha256": "3e7e5d25a6db33b7c90f8c5203d6f490d6c0a4f04a46f228af0e33727db5df5e"
+    },
+    {
+     "path": "Q4_K_M/GLM-4.5-Air-Q4_K_M-00002-of-00002.gguf",
+     "size": 22975001632,
+     "sha256": "ac6e50523d45c53faf3bf72d8fe109f3dd54bc6abe98a7773a3636112ead82a6"
+    }
+   ]
+  },
+  {
+   "id": "llama-3.3-70b-q8",
+   "name": "Llama 3.3 70B · Q8_0",
+   "family": "Llama 3.3",
+   "params": "70B",
+   "description_ru": "Llama 3.3 70B в квантовании Q8_0 — почти без потерь относительно исходных весов; нужен большой объём памяти.",
+   "description_en": "Llama 3.3 70B in Q8_0: nearly lossless versus the original weights; needs a lot of memory.",
+   "tags": [
+    "Chat",
+    "Tools",
+    "Multilingual"
+   ],
+   "repo": "bartowski/Llama-3.3-70B-Instruct-GGUF",
+   "revision": "b6c5c9f176f3279204034e1d16d393105e95cb88",
+   "file": "Llama-3.3-70B-Instruct-Q8_0/Llama-3.3-70B-Instruct-Q8_0-00001-of-00002.gguf",
+   "parts": 2,
+   "size_bytes": 74975055008,
+   "quant": "Q8_0",
+   "context": 131072,
+   "license": "llama3.3",
+   "architecture": "llama",
+   "layers": 80,
+   "kv": {
+    "per_token": 327680,
+    "swa_per_token": 0,
+    "swa_window": 0,
+    "fixed": 0
+   },
+   "files": [
+    {
+     "path": "Llama-3.3-70B-Instruct-Q8_0/Llama-3.3-70B-Instruct-Q8_0-00001-of-00002.gguf",
+     "size": 39927004064,
+     "sha256": "0c4ec5083aec2efa104269e8b63e2d9f3322e2fa50511184314093a7b4697878"
+    },
+    {
+     "path": "Llama-3.3-70B-Instruct-Q8_0/Llama-3.3-70B-Instruct-Q8_0-00002-of-00002.gguf",
+     "size": 35048050944,
+     "sha256": "e5c8858f5feafdc56200bbcbb3c4fadb07cb323c8ed13548dfb798dd1fb24255"
+    }
+   ]
+  }
+ ]
+}

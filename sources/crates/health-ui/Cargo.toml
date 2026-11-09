@@ -1,0 +1,18 @@
+[package]
+name = "health-ui"
+description = "Health: contract between the app shell and its panels (Services, Panel trait, Actions)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+health-core = { workspace = true }
+health-theme = { workspace = true }
+health-providers = { workspace = true }
+health-mcp = { workspace = true }
+health-skills = { workspace = true }
+health-local = { workspace = true }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+parking_lot = { workspace = true }
+anyhow = { workspace = true }

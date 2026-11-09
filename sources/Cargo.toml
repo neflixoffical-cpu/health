@@ -1,0 +1,99 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/health-core",
+    "crates/health-theme",
+    "crates/health-icon",
+    "crates/health-providers",
+    "crates/health-tools",
+    "crates/health-mcp",
+    "crates/health-skills",
+    "crates/health-local",
+    "crates/health-agent",
+    "crates/health-ui",
+    "crates/health-tui",
+    "crates/health-panels-a",
+    "crates/health-panels-b",
+    "crates/health",
+    "crates/health-setup",
+]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
+authors = ["Health"]
+license = "MIT"
+rust-version = "1.80"
+
+[workspace.dependencies]
+# internal crates
+health-core = { path = "crates/health-core" }
+health-theme = { path = "crates/health-theme" }
+health-icon = { path = "crates/health-icon" }
+health-providers = { path = "crates/health-providers" }
+health-tools = { path = "crates/health-tools" }
+health-mcp = { path = "crates/health-mcp" }
+health-skills = { path = "crates/health-skills" }
+health-local = { path = "crates/health-local" }
+health-agent = { path = "crates/health-agent" }
+health-ui = { path = "crates/health-ui" }
+health-panels-a = { path = "crates/health-panels-a" }
+health-panels-b = { path = "crates/health-panels-b" }
+health-tui = { path = "crates/health-tui" }
+
+# external crates (pinned majors; use `dep = { workspace = true }` in member crates)
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+futures = "0.3"
+futures-util = "0.3"
+reqwest = { version = "0.12", features = ["json", "stream", "gzip"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "2"
+async-trait = "0.1"
+dirs = "5"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+base64 = "0.22"
+parking_lot = "0.12"
+pulldown-cmark = { version = "0.12", default-features = false }
+unicode-width = "0.2"
+unicode-segmentation = "1"
+regex = "1"
+globset = "0.4"
+ignore = "0.4"
+similar = "2"
+sha2 = "0.10"
+hex = "0.4"
+url = "2"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+winreg = "0.52"
+miniz_oxide = "0.8"
+png = "0.17"
+embed-resource = "3"
+arboard = "3"
+open = "5"
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Cryptography",
+    "Win32_System_Memory",
+    "Win32_System_SystemInformation",
+    "Win32_Globalization",
+    "Win32_System_Console",
+    "Win32_System_Threading",
+    "Win32_System_JobObjects",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+strip = true
+
+[profile.dev]
+debug = 1

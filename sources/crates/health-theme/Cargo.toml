@@ -1,0 +1,13 @@
+[package]
+name = "health-theme"
+description = "Health design system: palette, mascot, logo, widgets, animations"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+health-core = { workspace = true }
+health-icon = { workspace = true }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+unicode-width = { workspace = true }

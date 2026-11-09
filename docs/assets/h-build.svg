@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 86" width="1200" height="86" role="img" aria-label="Сборка из исходников">
+<style>
+.c{animation:c 1s steps(1) infinite}@keyframes c{50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.c{animation:none}}
+</style>
+<rect x="1" y="1" width="1198" height="84" rx="12" fill="#050806" stroke="#1e3a26" stroke-width="2"/>
+<rect x="1" y="1" width="8" height="84" rx="4" fill="#39ff88"/>
+<g transform="translate(40 43)" fill="#39ff88"><rect x="-9" y="-3" width="18" height="6"/><rect x="-3" y="-9" width="6" height="18"/></g>
+<text x="70" y="40" font-family="'Cascadia Mono','JetBrains Mono',Consolas,'SFMono-Regular',Menlo,monospace" font-size="28" font-weight="700" fill="#e8f5ec">Сборка из исходников</text>
+<text x="70" y="68" font-family="'Cascadia Mono','JetBrains Mono',Consolas,'SFMono-Regular',Menlo,monospace" font-size="16" fill="#5f7a69">// Rust, 15 крейтов, один health.exe</text>
+<rect x="416" y="18" width="14" height="26" fill="#39ff88" class="c"/>
+</svg>

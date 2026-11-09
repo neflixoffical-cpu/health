@@ -1,0 +1,17 @@
+[package]
+name = "health-icon"
+description = "Health mascot rasterizer + .ico encoder + Windows resource embedding"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+png = { workspace = true }
+embed-resource = { workspace = true, optional = true }
+
+[features]
+build = ["dep:embed-resource"]
+
+[[bin]]
+name = "gen-icon"
+path = "src/bin/gen_icon.rs"

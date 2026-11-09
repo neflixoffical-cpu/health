@@ -1,0 +1,17 @@
+[package]
+name = "health-agent"
+description = "Health agent loop: conversation, streaming, tool execution, permissions"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+health-core = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+async-trait = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+parking_lot = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
