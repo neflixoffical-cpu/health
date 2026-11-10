@@ -17,3 +17,6 @@ __pycache__/
 *.log
 Thumbs.db
 .DS_Store
+
+# промо-сайт хранится только локально
+/site/

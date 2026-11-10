@@ -282,9 +282,6 @@ flowchart LR
 
 </details>
 
-В папке [`site/`](site) лежит промо-сайт. Чтобы открыть его, запустите `python site/serve.py`
-и перейдите на <http://localhost:777>.
-
 <img src="docs/assets/divider.svg" width="100%" alt="">
 
 <details>
