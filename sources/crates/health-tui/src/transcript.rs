@@ -39,7 +39,8 @@ pub enum Item {
     Welcome,
     User { text: String },
     Assistant { text: String, streaming: bool },
-    Thinking { text: String, started: Instant, ended: Option<Instant> },
+    /// Model reasoning; `custom` = the model's own `custom_reasoning` block ("Раздумье").
+    Thinking { text: String, started: Instant, ended: Option<Instant>, custom: bool },
     Tool(ToolItem),
     Notice { level: NoticeLevel, text: String },
     Error { message: String, hint: Option<String> },
@@ -179,13 +180,18 @@ pub fn render_item(it: &Item, width: u16, expanded: bool, now: Instant, welcome:
             }
             out
         }
-        Item::Thinking { text, started, ended } => {
+        Item::Thinking { text, started, ended, custom } => {
             let active = ended.is_none();
-            let label = if active { t!("Размышляю", "Thinking") } else { t!("Размышления", "Thought") };
+            let label = match (custom, active) {
+                (true, true) => t!("Раздумываю", "Reasoning"),
+                (true, false) => t!("Раздумье", "Reasoning"),
+                (false, true) => t!("Размышляю", "Thinking"),
+                (false, false) => t!("Размышления", "Thought"),
+            };
             let time = elapsed(*started, *ended, now);
             let glyph_color = if active { blend(EMERALD, LIME, fx::pulse(now, 1.0)) } else { TEXT_MUTED };
             let mut head = vec![
-                Span::styled("✻ ", Style::new().fg(glyph_color)),
+                Span::styled(if *custom { "◇ " } else { "✻ " }, Style::new().fg(glyph_color)),
                 Span::styled(label.to_string(), Style::new().fg(TEXT_DIM).add_modifier(Modifier::ITALIC)),
             ];
             if !time.is_empty() {
@@ -448,6 +454,8 @@ fn input_summary(input: &Value) -> String {
 pub fn from_messages(msgs: &[Message]) -> Vec<Item> {
     let now = Instant::now();
     let mut items: Vec<Item> = Vec::new();
+    // text written between custom_reasoning open/close was the model's reasoning
+    let mut reasoning = false;
     for m in msgs {
         match m.role {
             Role::User => {
@@ -470,8 +478,12 @@ pub fn from_messages(msgs: &[Message]) -> Vec<Item> {
             Role::Assistant => {
                 for b in &m.content {
                     match b {
-                        ContentBlock::Thinking { thinking, .. } if !thinking.trim().is_empty() => items.push(Item::Thinking { text: thinking.clone(), started: now, ended: Some(now) }),
+                        ContentBlock::Thinking { thinking, .. } if !thinking.trim().is_empty() => items.push(Item::Thinking { text: thinking.clone(), started: now, ended: Some(now), custom: false }),
+                        ContentBlock::Text { text } if !text.trim().is_empty() && reasoning => items.push(Item::Thinking { text: text.clone(), started: now, ended: Some(now), custom: true }),
                         ContentBlock::Text { text } if !text.trim().is_empty() => items.push(Item::Assistant { text: text.clone(), streaming: false }),
+                        ContentBlock::ToolUse { name, input, .. } if name == "custom_reasoning" => {
+                            reasoning = input.get("action").and_then(|v| v.as_str()) == Some("open");
+                        }
                         ContentBlock::ToolUse { id, name, input } => {
                             let s = input_summary(input);
                             items.push(Item::Tool(ToolItem {

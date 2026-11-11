@@ -17,9 +17,12 @@ pub mod logo;
 pub mod widgets;
 pub mod list;
 pub mod field;
+pub mod hit;
+pub mod textarea;
 pub mod snapshot;
 
 pub use field::{FieldAction, TextField};
+pub use textarea::{AreaAction, TextArea};
 pub use list::{ListAction, ListItem, SelectList};
 pub use mascot::{Mascot, MascotSize, Mood};
 pub use palette::*;

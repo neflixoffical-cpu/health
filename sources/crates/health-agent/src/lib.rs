@@ -1,6 +1,9 @@
 //! health-agent — the conversation loop (model ↔ tools), driven by `AgentCommand`s and reporting
 //! `AgentEvent`s. Health sends no system prompt of its own: `ChatRequest::system` is only the
-//! user's optional custom prompt.
+//! user's optional custom prompt (plus, with `/customeffort` on, the user's prompt for the active
+//! custom effort level). Sub-agents (`agent` tool) run the same loop with the user's agent prompt.
+
+mod internal;
 
 use futures::future::join_all;
 use health_core::{
@@ -12,12 +15,40 @@ use parking_lot::{Mutex, RwLock};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
 const MAX_STEPS: u32 = 100;
+const MAX_SUB_STEPS: u32 = 60;
+
+/// What makes a sub-agent different from the main agent.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct SubSpec {
+    /// `None` = the current model.
+    pub model: Option<health_core::ModelRef>,
+    /// The user's prompt for this agent (`None` = no system prompt at all).
+    pub system: Option<String>,
+    pub effort: Option<health_core::Effort>,
+    /// Allowed tool names; empty = all (the `agent` tool itself is never given to a sub-agent).
+    pub tools: Vec<String>,
+}
+
+/// The message sent after a soft stop (Ctrl+Q), in the interface language.
+fn soft_stop_prompt() -> &'static str {
+    t!(
+        "[Плавная остановка] Пользователь попросил плавно остановиться. Не начинай новую работу. Аккуратно заверши то, что делал: \
+         останови процессы, которые ты запустил, если они ещё идут; не оставляй файлы изменёнными наполовину — либо доведи \
+         начатую правку до целостного состояния, либо откати её. Затем коротко напиши: что успел сделать, на чём остановился \
+         и что осталось. Инструменты используй только если это нужно для аккуратной остановки.",
+        "[Soft stop] The user asked you to stop gracefully. Do not start any new work. Wind down what you were doing: stop \
+         processes you started if they are still running; do not leave files half-edited — either bring the started change to a \
+         consistent state or revert it. Then briefly report what you finished, where you stopped and what is left. Use tools \
+         only if they are needed to stop cleanly."
+    )
+}
 
 /// Start the agent task (must be called inside a tokio runtime).
 pub fn spawn(config: SharedConfig, resolver: Arc<dyn BackendResolver>, tools: Arc<dyn ToolProvider>, cwd: PathBuf) -> AgentHandle {
@@ -32,6 +63,8 @@ pub fn spawn(config: SharedConfig, resolver: Arc<dyn BackendResolver>, tools: Ar
         ev: ev_tx,
         total: Usage::default(),
         allow: Arc::new(Mutex::new(HashSet::new())),
+        sub: None,
+        reasoning: Arc::new(AtomicBool::new(false)),
     };
     tokio::spawn(agent.run(cmd_rx));
     AgentHandle { commands: cmd_tx, events: ev_rx }
@@ -52,6 +85,10 @@ struct Agent {
     conv: Conversation,
     total: Usage,
     allow: Arc<Mutex<HashSet<String>>>,
+    /// `Some` for a sub-agent started by the `agent` tool.
+    sub: Option<SubSpec>,
+    /// The model opened its `custom_reasoning` block: its text is shown as reasoning.
+    reasoning: Arc<AtomicBool>,
 }
 
 fn notice(ev: &mpsc::UnboundedSender<AgentEvent>, level: NoticeLevel, text: impl Into<String>) {
@@ -81,6 +118,72 @@ fn error_result(id: &str, text: &str) -> ContentBlock {
 }
 
 impl Agent {
+    /// A sub-agent: fresh conversation, the user's agent prompt, its own events channel.
+    pub(crate) fn sub(
+        config: SharedConfig,
+        resolver: Arc<dyn BackendResolver>,
+        tools: Arc<dyn ToolProvider>,
+        cwd: PathBuf,
+        ev: mpsc::UnboundedSender<AgentEvent>,
+        allow: Arc<Mutex<HashSet<String>>>,
+        spec: SubSpec,
+    ) -> Agent {
+        Agent {
+            conv: Conversation::new(&cwd),
+            config,
+            resolver,
+            tools,
+            cwd: Arc::new(RwLock::new(cwd)),
+            ev,
+            total: Usage::default(),
+            allow,
+            sub: Some(spec),
+            reasoning: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    /// Run one task to the end (sub-agents): the task is the only user message.
+    pub(crate) async fn run_task(&mut self, task: String, cancel: &CancellationToken) -> StopReason {
+        self.conv.messages.push(Message::user_text(task));
+        self.steps(cancel).await
+    }
+
+    /// Text of the last assistant message (the sub-agent's report).
+    pub(crate) fn final_text(&self) -> String {
+        self.conv.messages.iter().rev().find(|m| m.role == Role::Assistant && !m.text().trim().is_empty()).map(|m| m.text()).unwrap_or_default()
+    }
+
+    /// Every tool the model gets this step: the shared tools plus the agent's own ones.
+    fn all_tools(&self, cfg: &health_core::Config, model: &health_core::ModelRef) -> Vec<Arc<dyn Tool>> {
+        let mut tools = self.tools.tools();
+        match &self.sub {
+            Some(spec) => {
+                tools.retain(|t| t.name() != internal::AGENT_TOOL);
+                if !spec.tools.is_empty() {
+                    tools.retain(|t| spec.tools.iter().any(|n| n == t.name()));
+                }
+            }
+            None => {
+                if cfg.agents.tool_enabled {
+                    tools.push(Arc::new(internal::AgentTool {
+                        config: self.config.clone(),
+                        resolver: self.resolver.clone(),
+                        tools: self.tools.clone(),
+                        cwd: self.cwd.clone(),
+                        allow: self.allow.clone(),
+                        ev: self.ev.clone(),
+                        agents: cfg.agents.clone(),
+                    }));
+                }
+                if cfg.custom_reasoning_for(model) {
+                    tools.push(Arc::new(internal::ReasoningTool { open: self.reasoning.clone() }));
+                }
+            }
+        }
+        tools.sort_by(|a, b| a.name().cmp(b.name()));
+        tools
+    }
+
     async fn run(mut self, mut rx: mpsc::UnboundedReceiver<AgentCommand>) {
         let mut queue: VecDeque<Submit> = VecDeque::new();
         loop {
@@ -98,6 +201,7 @@ impl Agent {
                     let cwd = self.cwd.clone();
                     let mut post: Option<AgentCommand> = None;
                     let mut shutdown = false;
+                    let mut soft = false;
                     {
                         let fut = self.turn(Submit { text, display, attachments }, cancel.clone());
                         tokio::pin!(fut);
@@ -106,6 +210,12 @@ impl Agent {
                                 _ = &mut fut => break,
                                 c = rx.recv() => match c {
                                     Some(AgentCommand::Cancel) => cancel.cancel(),
+                                    Some(AgentCommand::SoftStop) => {
+                                        if !soft {
+                                            soft = true;
+                                            cancel.cancel();
+                                        }
+                                    }
                                     Some(AgentCommand::Submit { text, display, attachments }) => {
                                         queue.push_back(Submit { text, display, attachments });
                                         notice(&ev, NoticeLevel::Info, t!("Сообщение в очереди — отправлю после текущего ответа", "Message queued — it will be sent after the current answer"));
@@ -126,13 +236,21 @@ impl Agent {
                     }
                     if let Some(c) = post {
                         self.apply(c);
+                    } else if soft && !shutdown {
+                        // ask the model to wind down instead of leaving it mid-step
+                        let _ = self.ev.send(AgentEvent::SoftStopping);
+                        queue.push_front(Submit {
+                            text: soft_stop_prompt().to_string(),
+                            display: Some(t!("⏸ Плавная остановка (Ctrl+Q)", "⏸ Soft stop (Ctrl+Q)").to_string()),
+                            attachments: Vec::new(),
+                        });
                     }
                     if shutdown {
                         break;
                     }
                 }
                 AgentCommand::Shutdown => break,
-                AgentCommand::Cancel => {}
+                AgentCommand::Cancel | AgentCommand::SoftStop => {}
                 other => self.apply(other),
             }
         }
@@ -159,6 +277,7 @@ impl Agent {
 
     async fn turn(&mut self, s: Submit, cancel: CancellationToken) {
         let started = Instant::now();
+        self.reasoning.store(false, Ordering::SeqCst);
         let _ = self.ev.send(AgentEvent::Busy(true));
         let mut content = Vec::new();
         // repair dangling tool calls from an interrupted / refused turn
@@ -189,12 +308,13 @@ impl Agent {
 
     async fn steps(&mut self, cancel: &CancellationToken) -> StopReason {
         let mut truncations = 0;
-        for step in 0..MAX_STEPS {
+        let max_steps = if self.sub.is_some() { MAX_SUB_STEPS } else { MAX_STEPS };
+        for step in 0..max_steps {
             if cancel.is_cancelled() {
                 return StopReason::Cancelled;
             }
             let cfg = self.config.read().clone();
-            let Some(model) = cfg.current_model.clone() else {
+            let Some(model) = self.sub.as_ref().and_then(|s| s.model.clone()).or_else(|| cfg.current_model.clone()) else {
                 let _ = self.ev.send(AgentEvent::Error {
                     kind: ChatErrorKind::NoKey,
                     message: t!("Модель не выбрана", "No model selected").into(),
@@ -227,14 +347,17 @@ impl Agent {
                     return StopReason::Other { reason: "resolve failed".into() };
                 }
             };
-            let mut tools = self.tools.tools();
-            tools.sort_by(|a, b| a.name().cmp(b.name()));
+            let tools = self.all_tools(&cfg, &model);
+            let (system, effort) = match &self.sub {
+                Some(spec) => (spec.system.clone(), spec.effort.unwrap_or_else(|| cfg.effort_for(&model))),
+                None => (cfg.system_prompt_for(&model), cfg.effort_for(&model)),
+            };
             let req = ChatRequest {
                 model: model.clone(),
-                system: cfg.system_prompt(),
+                system,
                 messages: self.conv.messages.clone(),
                 tools: tools.iter().map(|t| t.spec()).collect(),
-                effort: cfg.effort,
+                effort,
                 max_tokens: cfg.max_output_tokens,
                 model_info: self.resolver.model_info(&model),
                 show_thinking: cfg.ui.show_thinking,
@@ -268,7 +391,7 @@ impl Agent {
                     self.conv.messages.push(out.message.clone());
                     match out.stop {
                         StopReason::ToolUse | StopReason::EndTurn if has_tools => {
-                            let results = self.run_tools(&out.message, &cfg, cancel).await;
+                            let results = self.run_tools(&out.message, &cfg, &tools, cancel).await;
                             self.conv.messages.push(Message { role: Role::User, content: results, meta: MessageMeta { timestamp: chrono::Utc::now().timestamp(), ..Default::default() } });
                             if cancel.is_cancelled() {
                                 return StopReason::Cancelled;
@@ -318,7 +441,7 @@ impl Agent {
                 }
             }
         }
-        notice(&self.ev, NoticeLevel::Warning, tf!("Достигнут предел в {} шагов — остановлено", "Reached the limit of {} steps — stopped", MAX_STEPS));
+        notice(&self.ev, NoticeLevel::Warning, tf!("Достигнут предел в {} шагов — остановлено", "Reached the limit of {} steps — stopped", max_steps));
         StopReason::Other { reason: "step limit".into() }
     }
 
@@ -326,7 +449,11 @@ impl Agent {
         let ev = match e {
             StreamEvent::TextDelta(t) => {
                 partial.push_str(&t);
-                AgentEvent::TextDelta(t)
+                if self.reasoning.load(Ordering::SeqCst) {
+                    AgentEvent::ReasoningDelta(t)
+                } else {
+                    AgentEvent::TextDelta(t)
+                }
             }
             StreamEvent::ThinkingDelta(t) => AgentEvent::ThinkingDelta(t),
             StreamEvent::ToolUseStart { id, name } => AgentEvent::ToolCallStarted { call_id: id, name },
@@ -342,9 +469,9 @@ impl Agent {
     }
 
     /// Execute every tool call of `msg`; returns tool_result blocks in call order.
-    async fn run_tools(&self, msg: &Message, cfg: &health_core::Config, cancel: &CancellationToken) -> Vec<ContentBlock> {
+    async fn run_tools(&self, msg: &Message, cfg: &health_core::Config, offered: &[Arc<dyn Tool>], cancel: &CancellationToken) -> Vec<ContentBlock> {
         let calls: Vec<(String, String, Value)> = msg.tool_uses().into_iter().map(|(i, n, v)| (i.to_string(), n.to_string(), v.clone())).collect();
-        let tools: HashMap<String, Arc<dyn Tool>> = self.tools.tools().into_iter().map(|t| (t.name().to_string(), t)).collect();
+        let tools: HashMap<String, Arc<dyn Tool>> = offered.iter().map(|t| (t.name().to_string(), t.clone())).collect();
         let mut results: Vec<Option<ContentBlock>> = vec![None; calls.len()];
         let mut i = 0;
         while i < calls.len() {

@@ -103,8 +103,16 @@ pub enum PanelKind {
     Resume,
     /// `/cost`, `/usage`
     Cost,
-    /// First-run wizard (language → key or local model).
+    /// First-run wizard (language → Health account, key or local model).
     Onboarding,
+    /// `/customeffort` — the user's own effort levels with their own prompts.
+    CustomEffort,
+    /// `/agents` — sub-agents the model can delegate to.
+    Agents,
+    /// `/login` — sign in with a Health Cloud account (in the browser).
+    Login,
+    /// `/reset` — wipe the configuration (asks to type `healthreset`).
+    Reset,
 }
 
 /// What a panel asks the shell to do.
@@ -126,6 +134,8 @@ pub enum Action {
     /// Open another panel (replaces the current one).
     OpenPanel(PanelKind),
     ClearConversation,
+    /// `/reset` confirmed: wipe the configuration and the input history, start the first-run wizard.
+    ResetAll,
     Quit,
 }
 
@@ -172,8 +182,20 @@ pub trait Panel: Send {
         Vec::new()
     }
     /// Mouse event; `area` is the inner area the panel was last rendered into.
+    /// Clicks on rows, tabs and key hints are turned into key presses by the shell (see
+    /// `health_theme::hit`); this receives everything else.
     fn on_mouse(&mut self, _ev: MouseEvent, _area: Rect, _ctx: &PanelCtx) -> Vec<Action> {
         Vec::new()
+    }
+    /// Mouse wheel. By default it moves the selection like ↑/↓.
+    fn on_wheel(&mut self, up: bool, ctx: &PanelCtx) -> Vec<Action> {
+        let code = if up { crossterm::event::KeyCode::Up } else { crossterm::event::KeyCode::Down };
+        let k = crossterm::event::KeyEvent::new(code, crossterm::event::KeyModifiers::NONE);
+        let mut out = Vec::new();
+        for _ in 0..3 {
+            out.extend(self.on_key(k, ctx));
+        }
+        out
     }
     /// Called every frame; poll background tasks here.
     fn tick(&mut self, _ctx: &PanelCtx) -> Vec<Action> {

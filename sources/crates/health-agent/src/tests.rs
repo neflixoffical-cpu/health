@@ -157,7 +157,125 @@ async fn text_turn_has_no_system_prompt() {
     assert!(log.last().unwrap().contains("EndTurn"));
     let req = &s.script.seen.lock()[0];
     assert!(req.system.is_none(), "Health must not add a system prompt");
-    assert_eq!(req.tools.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), vec!["edit", "read", "slow"], "sorted tools");
+    assert_eq!(req.tools.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), vec!["agent", "edit", "read", "slow"], "sorted tools");
+    assert!(req.tools.iter().all(|t| t.name != "custom_reasoning"), "custom_reasoning only with /customeffort");
+}
+
+fn tool_with(id: &str, name: &str, input: Value) -> ContentBlock {
+    ContentBlock::ToolUse { id: id.into(), name: name.into(), input }
+}
+
+#[tokio::test]
+async fn custom_effort_prompt_effort_and_reasoning_block() {
+    let mut s = setup(
+        vec![
+            Step::Reply(vec![tool_with("r1", "custom_reasoning", json!({"action": "open"}))], StopReason::ToolUse),
+            Step::Reply(vec![ContentBlock::text("let me think"), tool_with("r2", "custom_reasoning", json!({"action": "close"}))], StopReason::ToolUse),
+            Step::Reply(vec![ContentBlock::text("the answer")], StopReason::EndTurn),
+        ],
+        PermissionMode::Ask,
+        true,
+    );
+    {
+        let mut c = s.config.write();
+        let m = c.current_model.clone().unwrap();
+        c.custom_effort.enabled = true;
+        c.custom_effort.models = vec![m.key()];
+        c.custom_effort.selected = Some("max".into());
+        let lvl = c.custom_effort.levels.iter_mut().find(|l| l.id == "max").unwrap();
+        lvl.prompt = "Think very carefully.".into();
+        lvl.name = "Глубоко".into();
+    }
+    s.handle.commands.send(AgentCommand::Submit { text: "q".into(), display: None, attachments: vec![] }).unwrap();
+    let (mut reasoning, mut text) = (String::new(), String::new());
+    loop {
+        match tokio::time::timeout(Duration::from_secs(10), s.handle.events.recv()).await.unwrap().unwrap() {
+            AgentEvent::ReasoningDelta(t) => reasoning.push_str(&t),
+            AgentEvent::TextDelta(t) => text.push_str(&t),
+            AgentEvent::TurnFinished { .. } => break,
+            _ => {}
+        }
+    }
+    assert_eq!(reasoning, "let me think", "text between open and close is reasoning");
+    assert_eq!(text, "the answer");
+    let seen = s.script.seen.lock();
+    assert_eq!(seen[0].system.as_deref(), Some("Think very carefully."));
+    assert_eq!(seen[0].effort, health_core::Effort::Max);
+    assert!(seen[0].tools.iter().any(|t| t.name == "custom_reasoning"));
+}
+
+#[tokio::test]
+async fn soft_stop_asks_the_model_to_wind_down() {
+    let mut s = setup(vec![Step::Hang("working…".into()), Step::Reply(vec![ContentBlock::text("stopped cleanly")], StopReason::EndTurn)], PermissionMode::Ask, true);
+    s.handle.commands.send(AgentCommand::Submit { text: "big job".into(), display: None, attachments: vec![] }).unwrap();
+    loop {
+        if let Some(AgentEvent::TextDelta(_)) = s.handle.events.recv().await {
+            break;
+        }
+    }
+    s.handle.commands.send(AgentCommand::SoftStop).unwrap();
+    let mut softened = false;
+    let mut finished = 0;
+    while finished < 2 {
+        match tokio::time::timeout(Duration::from_secs(10), s.handle.events.recv()).await.unwrap().unwrap() {
+            AgentEvent::SoftStopping => softened = true,
+            AgentEvent::TurnFinished { .. } => finished += 1,
+            _ => {}
+        }
+    }
+    assert!(softened);
+    let seen = s.script.seen.lock();
+    assert_eq!(seen.len(), 2, "the model got one more request to wind down");
+    let last_user = seen[1].messages.iter().rev().find(|m| m.role == Role::User).unwrap();
+    assert!(last_user.text().contains("[Плавная остановка]") || last_user.text().contains("[Soft stop]"), "{}", last_user.text());
+    assert_eq!(last_user.meta.display.as_deref().map(|d| d.contains("Ctrl+Q")), Some(true));
+}
+
+#[tokio::test]
+async fn agent_tool_runs_a_sub_agent_in_its_own_context() {
+    let mut s = setup(
+        vec![
+            Step::Reply(vec![tool_with("a1", "agent", json!({"agent": "rev", "description": "review", "task": "check read"}))], StopReason::ToolUse),
+            // the sub-agent: uses an allowed tool, then reports
+            Step::Reply(vec![tool_use("s1", "read")], StopReason::ToolUse),
+            Step::Reply(vec![ContentBlock::text("sub report")], StopReason::EndTurn),
+            // back in the main agent
+            Step::Reply(vec![ContentBlock::text("fin")], StopReason::EndTurn),
+        ],
+        PermissionMode::Ask,
+        true,
+    );
+    s.config.write().agents.list.push(health_core::AgentDef {
+        name: "rev".into(),
+        description: "reviews things".into(),
+        prompt: "You review.".into(),
+        tools: vec!["read".into()],
+        enabled: true,
+        ..Default::default()
+    });
+    s.handle.commands.send(AgentCommand::Submit { text: "go".into(), display: None, attachments: vec![] }).unwrap();
+    let mut sub_usage = 0;
+    let mut progress = Vec::new();
+    loop {
+        match tokio::time::timeout(Duration::from_secs(10), s.handle.events.recv()).await.unwrap().unwrap() {
+            AgentEvent::SubUsage { usage, .. } => sub_usage += usage.output_tokens,
+            AgentEvent::ToolProgress { line, .. } => progress.push(line),
+            AgentEvent::TurnFinished { .. } => break,
+            _ => {}
+        }
+    }
+    let seen = s.script.seen.lock();
+    assert_eq!(seen.len(), 4);
+    let sub = &seen[1];
+    assert_eq!(sub.system.as_deref(), Some("You review."), "the agent's own prompt");
+    assert_eq!(sub.messages.len(), 1, "fresh context: only the task");
+    assert_eq!(sub.messages[0].text(), "check read");
+    assert_eq!(sub.tools.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), vec!["read"], "only allowed tools, never `agent`");
+    let main_results = seen[3].messages.last().unwrap();
+    assert!(matches!(&main_results.content[0], ContentBlock::ToolResult { content, is_error: false, .. } if matches!(&content[0], ToolResultPart::Text { text } if text == "sub report")));
+    assert_eq!(sub_usage, 10, "two sub-agent requests counted");
+    assert!(progress.iter().any(|l| l.contains("read")), "{progress:?}");
+    assert_eq!(s.calls.lock().len(), 1);
 }
 
 #[tokio::test]

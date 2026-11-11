@@ -20,6 +20,9 @@ pub enum Protocol {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderKind {
+    /// Health Cloud — the account at health-ai.lol (OpenAI-compatible gateway, `heal_` keys).
+    #[serde(rename = "health")]
+    HealthCloud,
     Anthropic,
     #[serde(rename = "openai")]
     OpenAI,
@@ -56,6 +59,7 @@ impl ProviderKind {
     pub fn key_providers() -> &'static [ProviderKind] {
         use ProviderKind::*;
         &[
+            HealthCloud,
             Anthropic,
             OpenAI,
             OpenRouter,
@@ -79,6 +83,7 @@ impl ProviderKind {
     pub fn display_name(self) -> &'static str {
         use ProviderKind::*;
         match self {
+            HealthCloud => "Health Cloud",
             Anthropic => "Anthropic",
             OpenAI => "OpenAI",
             OpenRouter => "OpenRouter",
@@ -105,6 +110,7 @@ impl ProviderKind {
     pub fn slug(self) -> &'static str {
         use ProviderKind::*;
         match self {
+            HealthCloud => "health",
             Anthropic => "anthropic",
             OpenAI => "openai",
             OpenRouter => "openrouter",
@@ -157,6 +163,7 @@ impl ProviderKind {
     pub fn default_base_url(self) -> Option<&'static str> {
         use ProviderKind::*;
         Some(match self {
+            HealthCloud => "https://api.health-ai.lol/v1",
             Anthropic => "https://api.anthropic.com",
             OpenAI => "https://api.openai.com/v1",
             OpenRouter => "https://openrouter.ai/api/v1",
@@ -194,6 +201,7 @@ impl ProviderKind {
     pub fn console_url(self) -> Option<&'static str> {
         use ProviderKind::*;
         Some(match self {
+            HealthCloud => "https://cabinet.health-ai.lol/#/keys",
             Anthropic => "https://console.anthropic.com/settings/keys",
             OpenAI => "https://platform.openai.com/api-keys",
             OpenRouter => "https://openrouter.ai/keys",
@@ -236,6 +244,7 @@ pub fn detect_provider(key: &str) -> Option<(ProviderKind, Confidence)> {
         return None;
     }
     let rules: &[(&str, ProviderKind)] = &[
+        ("heal_", HealthCloud),
         ("sk-ant-", Anthropic),
         ("sk-or-", OpenRouter),
         ("AIza", Gemini),

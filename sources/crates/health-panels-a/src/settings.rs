@@ -218,6 +218,9 @@ impl Panel for SettingsPanel {
         for (row, (i, item)) in ITEMS.iter().enumerate().skip(self.scroll).take(list_h).enumerate() {
             let y = area.y + row as u16;
             let sel = i == self.sel;
+            if self.editing.is_none() {
+                health_theme::hit::row(Rect::new(area.x, y, area.width, 1), self.sel, i);
+            }
             if sel {
                 highlight(buf, Rect::new(area.x, y, area.width, 1));
             }

@@ -329,6 +329,16 @@ impl SelectList {
                 continue;
             }
             let selected = i == self.sel;
+            // mouse: clicking a row selects it and presses Enter (keys replayed by the shell)
+            if focused {
+                let between = |a: usize, b: usize| self.rows[a..b].iter().filter(|r| !self.items[r.idx].header).count();
+                let keys = if i > self.sel {
+                    crate::hit::move_keys(0, between(self.sel + 1, i + 1), true)
+                } else {
+                    crate::hit::move_keys(between(i, self.sel), 0, true)
+                };
+                crate::hit::register(Rect::new(area.x, y, text_w, 1), keys);
+            }
             let bg = if selected { if focused { FOREST } else { DEEP } } else { Color::Reset };
             if selected {
                 for x in area.x..area.x + text_w {

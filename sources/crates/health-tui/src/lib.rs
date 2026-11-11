@@ -7,11 +7,14 @@ mod app;
 mod commands;
 mod input;
 mod markdown;
+mod notify;
 mod transcript;
 mod view;
+#[cfg(test)]
+mod tests;
 
 use anyhow::Result;
-use crossterm::event::{DisableMouseCapture, EnableMouseCapture, EventStream};
+use crossterm::event::{DisableFocusChange, DisableMouseCapture, EnableFocusChange, EnableMouseCapture, EventStream};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, SetTitle};
 use crossterm::{cursor, execute};
 use futures_util::StreamExt;
@@ -29,7 +32,7 @@ pub struct RunOptions {
 
 fn restore_terminal() {
     let mut out = std::io::stdout();
-    let _ = execute!(out, DisableMouseCapture, LeaveAlternateScreen, cursor::Show);
+    let _ = execute!(out, DisableMouseCapture, DisableFocusChange, LeaveAlternateScreen, cursor::Show);
     let _ = disable_raw_mode();
     let _ = out.flush();
 }
@@ -43,6 +46,8 @@ pub async fn run(services: Services, mut agent: AgentHandle, factory: PanelFacto
     if mouse {
         let _ = execute!(out, EnableMouseCapture);
     }
+    // focus reports tell when the window is in the background (for the "answer ready" notification)
+    let _ = execute!(out, EnableFocusChange);
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         restore_terminal();
@@ -196,6 +201,10 @@ pub fn snapshot_html(scene: &str, width: u16, height: u16, services: &Services, 
         "resume" => Some(PanelKind::Resume),
         "cost" => Some(PanelKind::Cost),
         "onboarding" => Some(PanelKind::Onboarding),
+        "customeffort" => Some(PanelKind::CustomEffort),
+        "agents" => Some(PanelKind::Agents),
+        "login" => Some(PanelKind::Login),
+        "reset" => Some(PanelKind::Reset),
         _ => None,
     };
     if let Some(k) = panel {

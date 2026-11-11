@@ -51,7 +51,7 @@ impl Panel for Onboarding {
         fx::animations()
     }
     fn on_key(&mut self, k: KeyEvent, _ctx: &PanelCtx) -> Vec<Action> {
-        let n = if self.step == 0 { 2 } else { 3 };
+        let n = if self.step == 0 { 2 } else { 4 };
         match k.code {
             KeyCode::Left | KeyCode::Up | KeyCode::BackTab => self.sel = (self.sel + n - 1) % n,
             KeyCode::Right | KeyCode::Down | KeyCode::Tab => self.sel = (self.sel + 1) % n,
@@ -67,8 +67,9 @@ impl Panel for Onboarding {
                 }
                 self.finish();
                 return match self.sel {
-                    0 => vec![Action::OpenPanel(PanelKind::Keys { add: true })],
-                    1 => vec![Action::OpenPanel(PanelKind::LocalModel)],
+                    0 => vec![Action::OpenPanel(PanelKind::Login)],
+                    1 => vec![Action::OpenPanel(PanelKind::Keys { add: true })],
+                    2 => vec![Action::OpenPanel(PanelKind::LocalModel)],
                     _ => vec![Action::Close],
                 };
             }
@@ -85,7 +86,7 @@ impl Panel for Onboarding {
         fill_bg(buf, area, BG);
         self.mascot.tick(ctx.now);
         let (_, mh) = MascotSize::Large.cells();
-        let total = mh + logo::HEIGHT + 14;
+        let total = mh + logo::HEIGHT + 16;
         let top = area.y + area.height.saturating_sub(total) / 2;
         self.mascot.render(buf, Rect::new(area.x, top, area.width, mh), MascotSize::Large, ctx.now);
         let reveal = fx::ease_out_cubic((self.started.elapsed().as_secs_f32() / 0.7).min(1.0));
@@ -96,11 +97,22 @@ impl Panel for Onboarding {
             y += 2;
             center(buf, area, y, Line::from(Span::styled("Выберите язык  ·  Choose your language", Style::new().fg(TEXT_DIM))));
             y += 2;
-            center(buf, area, y, buttons(&["Русский", "English"], self.sel));
+            let line = buttons(&["Русский", "English"], self.sel);
+            let lw = line.width() as u16;
+            let bx = area.x + area.width.saturating_sub(lw) / 2;
+            // each button: "  label  " + 2 spaces
+            let mut cx = bx;
+            for (i, l) in ["Русский", "English"].iter().enumerate() {
+                let bw = l.chars().count() as u16 + 4;
+                health_theme::hit::row(Rect::new(cx, y, bw, 1), self.sel, i);
+                cx += bw + 2;
+            }
+            center(buf, area, y, line);
         } else {
             center(buf, area, y, Line::from(Span::styled(t!("Как будем работать?", "How do you want to start?"), Style::new().fg(TEXT).add_modifier(Modifier::BOLD))));
             y += 2;
             let opts = [
+                (t!("Войти через Health", "Sign in with Health"), t!("аккаунт health-ai.lol: ключ и тариф подтянутся сами", "a health-ai.lol account: key and plan arrive by themselves")),
                 (t!("Добавить API-ключ", "Add an API key"), t!("Anthropic, OpenAI, OpenRouter, Gemini и ещё 10+ провайдеров", "Anthropic, OpenAI, OpenRouter, Gemini and 10+ more")),
                 (t!("Скачать локальную модель", "Download a local model"), t!("работает без интернета на вашем ПК (от 2 до 80 ГБ ОЗУ)", "runs offline on your PC (2 to 80 GB RAM)")),
                 (t!("Позже", "Later"), t!("откроется чат; /keys и /localmodel доступны в любой момент", "open the chat; /keys and /localmodel are always available")),
@@ -112,7 +124,9 @@ impl Panel for Onboarding {
                     Span::styled(format!(" {a} "), if sel { Style::new().fg(BG).bg(NEON).add_modifier(Modifier::BOLD) } else { Style::new().fg(TEXT).bg(SURFACE_2) }),
                     Span::styled(format!("   {b}"), Style::new().fg(TEXT_MUTED)),
                 ]);
-                put_line(buf, area.x + area.width.saturating_sub(84) / 2, y, 84.min(area.width), &l);
+                let ox = area.x + area.width.saturating_sub(84) / 2;
+                health_theme::hit::row(Rect::new(ox, y, 84.min(area.width), 1), self.sel, i);
+                put_line(buf, ox, y, 84.min(area.width), &l);
                 y += 2;
             }
         }

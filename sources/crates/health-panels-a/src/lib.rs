@@ -1,10 +1,14 @@
 //! Health panels (a): model picker, API keys, effort, permission mode, help, settings, resume,
 //! cost and the first-run wizard.
 
+mod agents;
+mod customeffort;
 mod keys;
+pub mod login;
 mod misc;
 mod model;
 mod onboarding;
+mod reset;
 mod settings;
 pub mod util;
 
@@ -22,6 +26,10 @@ pub fn open(kind: &PanelKind, s: &Services) -> Option<Box<dyn Panel>> {
         PanelKind::Resume => Box::new(misc::ResumePanel::new()),
         PanelKind::Cost => Box::new(misc::CostPanel::new()),
         PanelKind::Onboarding => Box::new(onboarding::Onboarding::new(s)),
+        PanelKind::CustomEffort => Box::new(customeffort::CustomEffortPanel::new(s)),
+        PanelKind::Agents => Box::new(agents::AgentsPanel::new(s)),
+        PanelKind::Login => Box::new(login::LoginPanel::new(s)),
+        PanelKind::Reset => Box::new(reset::ResetPanel::new()),
         _ => return None,
     })
 }

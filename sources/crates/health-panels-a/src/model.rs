@@ -221,11 +221,9 @@ impl Panel for ModelPicker {
         }
         vec![]
     }
-    fn on_mouse(&mut self, ev: crossterm::event::MouseEvent, _area: Rect, _ctx: &PanelCtx) -> Vec<Action> {
-        match ev.kind {
-            crossterm::event::MouseEventKind::ScrollUp => self.list.scroll(-3),
-            crossterm::event::MouseEventKind::ScrollDown => self.list.scroll(3),
-            _ => {}
+    fn on_wheel(&mut self, up: bool, _ctx: &PanelCtx) -> Vec<Action> {
+        if self.add.is_none() {
+            self.list.scroll(if up { -3 } else { 3 });
         }
         vec![]
     }

@@ -7,7 +7,8 @@ use health_core::{t, tf, util, Effort, PermissionMode, TodoStatus, ToolDisplay, 
 use health_theme::fx::{self, blend, gradient, secs};
 use health_theme::palette::*;
 use health_theme::widgets::*;
-use health_theme::{logo, MascotSize, Mood};
+use health_theme::{hit, logo, MascotSize, Mood};
+use crossterm::event::{KeyCode, KeyModifiers};
 use health_ui::PanelCtx;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -24,6 +25,7 @@ const VERBS_EN: [&str; 8] = ["Thinking", "Pondering", "Analyzing", "Reading the 
 pub fn draw(app: &mut App, f: &mut Frame) {
     let area = f.area();
     let now = Instant::now();
+    hit::begin_frame();
     fill_bg(f.buffer_mut(), area, BG);
     if let Some(start) = app.splash {
         draw_splash(app, f.buffer_mut(), area, start, now);
@@ -71,6 +73,8 @@ pub fn draw(app: &mut App, f: &mut Frame) {
 
     // modal panel
     if app.panel.is_some() {
+        // the chat behind a menu is not clickable
+        hit::begin_frame();
         backdrop(f.buffer_mut(), area, 0.38);
         let services = app.services.clone();
         let ctx = PanelCtx { services: &services, now, animations: fx::animations() };
@@ -135,7 +139,13 @@ fn draw_header(app: &App, buf: &mut Buffer, r: Rect, now: Instant) {
         None => left.push(Span::styled(t!("модель не выбрана — /model", "no model — /model"), Style::new().fg(WARN))),
     }
     let mut right: Vec<Span> = Vec::new();
-    if cfg.effort != Effort::Auto {
+    let custom = cfg.current_model.as_ref().and_then(|m| cfg.custom_level_for(m)).cloned();
+    if let Some(l) = custom {
+        right.push(Span::styled(format!("{} ", t!("усилие", "effort")), Style::new().fg(TEXT_MUTED)));
+        right.extend(effort_bars(l.effort.level()));
+        right.push(Span::styled(format!(" {} ", l.name), Style::new().fg(MINT)));
+        right.push(Span::styled("✎  ", Style::new().fg(TEXT_MUTED)));
+    } else if cfg.effort != Effort::Auto {
         right.push(Span::styled(format!("{} ", t!("усилие", "effort")), Style::new().fg(TEXT_MUTED)));
         right.extend(effort_bars(cfg.effort.level()));
         right.push(Span::styled(format!(" {}   ", cfg.effort.label()), Style::new().fg(TEXT_DIM)));
@@ -174,8 +184,28 @@ fn draw_transcript(app: &mut App, buf: &mut Buffer, r: Rect, now: Instant) {
     app.scroll = app.scroll.min(max_scroll);
     let end = total - app.scroll;
     let start = end.saturating_sub(h);
+    let text_w = r.width.saturating_sub(2);
     for (i, l) in lines[start..end].iter().enumerate() {
-        buf.set_line(r.x, r.y + i as u16, l, r.width.saturating_sub(2));
+        buf.set_line(r.x, r.y + i as u16, l, text_w);
+    }
+    // plain text of the visible rows, for mouse selection
+    app.body = Rect::new(r.x, r.y, text_w, (end - start) as u16);
+    app.view_start = start;
+    app.view_rows = (0..(end - start) as u16)
+        .map(|row| (r.x..r.x + text_w).map(|x| buf.cell((x, r.y + row)).map(|c| c.symbol().to_string()).unwrap_or_default()).collect::<String>())
+        .collect();
+    if let Some(sel) = app.selection {
+        let ((l0, c0), (l1, c1)) = sel.ordered();
+        for line in l0.max(start)..=l1.min(end.saturating_sub(1)) {
+            let y = r.y + (line - start) as u16;
+            let from = if line == l0 { c0 } else { 0 };
+            let to = if line == l1 { c1 } else { text_w };
+            for x in r.x + from..(r.x + to).min(r.x + text_w) {
+                if let Some(c) = buf.cell_mut((x, y)) {
+                    c.set_bg(FOREST).set_fg(TEXT);
+                }
+            }
+        }
     }
     if total > h {
         scrollbar(buf, Rect::new(r.right() - 1, r.y, 1, r.height), total, max_scroll - app.scroll, h);
@@ -238,8 +268,17 @@ fn draw_indicator(app: &App, buf: &mut Buffer, r: Rect, now: Instant) {
     if app.turn_tokens > 0 {
         spans.push(Span::styled(format!(" · ↓ {}", util::human_tokens(app.turn_tokens)), Style::new().fg(TEXT_MUTED)));
     }
-    spans.push(Span::styled(format!("  ·  {}", t!("esc — прервать", "esc to interrupt")), Style::new().fg(TEXT_MUTED)));
-    put_line(buf, ecg.right() + 1, r.y, r.width.saturating_sub(ecg.width + 4), &Line::from(spans));
+    let before: u16 = spans.iter().map(|s| s.content.width() as u16).sum::<u16>() + 5;
+    let esc = t!("esc — прервать", "esc to interrupt");
+    let soft = t!("ctrl+q — остановить плавно", "ctrl+q to stop gently");
+    spans.push(Span::styled(format!("  ·  {esc}"), Style::new().fg(TEXT_MUTED)));
+    spans.push(Span::styled(format!("  ·  {soft}"), Style::new().fg(TEXT_MUTED)));
+    let x0 = ecg.right() + 1;
+    put_line(buf, x0, r.y, r.width.saturating_sub(ecg.width + 4), &Line::from(spans));
+    let ex = x0 + before;
+    hit::register(Rect::new(ex, r.y, esc.width() as u16, 1), vec![hit::key(KeyCode::Esc)]);
+    let sx = ex + esc.width() as u16 + 5;
+    hit::register(Rect::new(sx, r.y, soft.width() as u16, 1), vec![hit::key_mod(KeyCode::Char('q'), KeyModifiers::CONTROL)]);
 }
 
 fn draw_input(app: &mut App, buf: &mut Buffer, r: Rect, now: Instant) {
@@ -288,6 +327,7 @@ fn draw_palette(app: &App, buf: &mut Buffer, input: Rect, body: Rect) {
     for (i, s) in app.palette.iter().enumerate().skip(start).take(rows as usize) {
         let y = inner.y + (i - start) as u16;
         let sel = i == app.pal_sel;
+        hit::row(Rect::new(inner.x, y, inner.width, 1), app.pal_sel, i);
         if sel {
             for x in inner.left()..inner.right() {
                 if let Some(c) = buf.cell_mut((x, y)) {
@@ -400,6 +440,9 @@ fn draw_perm(app: &mut App, buf: &mut Buffer, r: Rect, now: Instant) {
         let st = if sel { Style::new().fg(NEON).add_modifier(Modifier::BOLD) } else { Style::new().fg(TEXT_DIM) };
         let line = Line::from(vec![Span::styled(if sel { "› " } else { "  " }, Style::new().fg(NEON)), Span::styled(format!("{}. ", i + 1), Style::new().fg(TEXT_MUTED)), Span::styled(o.clone(), st)]);
         put_line(buf, x, y, w, &line);
+        if p.feedback.is_none() {
+            hit::register(Rect::new(x, y, (line.width() as u16).min(w), 1), vec![hit::key(KeyCode::Char(char::from(b'1' + i as u8)))]);
+        }
         y += 1;
     }
     if let Some(f) = p.feedback.as_mut() {
@@ -414,12 +457,16 @@ fn draw_footer(app: &App, buf: &mut Buffer, r: Rect) {
         PermissionMode::AcceptEdits => (format!("⏵⏵ {}", PermissionMode::AcceptEdits.label()), MINT),
         PermissionMode::Bypass => (format!("⚠ {}", PermissionMode::Bypass.label()), WARN),
     };
+    let mode_w = mode_txt.width() as u16 + 2 + "shift+tab".len() as u16;
+    let details = t!("ctrl+o подробности", "ctrl+o details");
     let left = Line::from(vec![
         Span::raw(" "),
         Span::styled(mode_txt, Style::new().fg(mode_color)),
         Span::styled(format!("  {}", t!("shift+tab", "shift+tab")), Style::new().fg(BORDER)),
-        Span::styled(format!("   {}", t!("/help · ctrl+o подробности", "/help · ctrl+o details")), Style::new().fg(TEXT_MUTED)),
+        Span::styled(format!("   /help · {details}"), Style::new().fg(TEXT_MUTED)),
     ]);
+    hit::register(Rect::new(r.x + 1, r.y, mode_w, 1), vec![hit::key(KeyCode::BackTab)]);
+    hit::register(Rect::new(r.x + 1 + mode_w + 3 + "/help · ".width() as u16, r.y, details.width() as u16, 1), vec![hit::key_mod(KeyCode::Char('o'), KeyModifiers::CONTROL)]);
     let s = app.services.session.read().clone();
     let mut right: Vec<Span> = Vec::new();
     if let Some(m) = &cfg.current_model {

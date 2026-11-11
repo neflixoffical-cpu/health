@@ -233,6 +233,20 @@ pub fn modal_frame(buf: &mut Buffer, rect: Rect, title: &str, hints: &[(String, 
         let mut l = hints_line(&fit);
         l.spans.insert(0, Span::raw(" "));
         l.spans.push(Span::raw(" "));
+        // every key hint in the bottom border is also a button
+        let lw = l.width() as u16;
+        let mut x = rect.right().saturating_sub(1 + lw) + 1;
+        let y = rect.bottom().saturating_sub(1);
+        for (i, (k, v)) in fit.iter().enumerate() {
+            if i > 0 {
+                x += 2;
+            }
+            let w = width(k) as u16 + 2 + width(v) as u16 + 1;
+            if let Some(key) = crate::hit::parse_hint(k) {
+                crate::hit::register(Rect::new(x, y, w, 1), vec![key]);
+            }
+            x += w;
+        }
         block = block.title_bottom(l.right_aligned());
     }
     let inner = block.inner(rect);
@@ -505,7 +519,14 @@ impl Tabs {
     }
     pub fn render(&self, buf: &mut Buffer, area: Rect) {
         let mut spans = Vec::new();
+        let mut x = area.x;
         for (i, t) in self.titles.iter().enumerate() {
+            let w = width(t) as u16 + 2 + self.badges[i].as_ref().map(|b| width(b) as u16 + 1).unwrap_or(0);
+            if i < 9 && x < area.right() {
+                let digit = char::from(b'1' + i as u8);
+                crate::hit::register(Rect::new(x, area.y, w.min(area.right() - x), 1), vec![crate::hit::key_mod(crossterm::event::KeyCode::Char(digit), crossterm::event::KeyModifiers::ALT)]);
+            }
+            x += w + 1;
             let active = i == self.selected;
             let st = if active {
                 Style::new().fg(BG).bg(NEON).add_modifier(Modifier::BOLD)
@@ -611,5 +632,29 @@ impl Toasts {
             put_line(buf, rect.x + 1, rect.y + 1, rect.width.saturating_sub(2), &line);
             y += 3;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::KeyCode;
+
+    /// The clickable area of each key hint must sit exactly on the hint drawn in the border.
+    #[test]
+    fn hint_targets_match_drawing() {
+        crate::hit::begin_frame();
+        let mut buf = Buffer::empty(Rect::new(0, 0, 70, 10));
+        let hints = vec![("Enter".to_string(), "выбрать".to_string()), ("Esc".to_string(), "закрыть".to_string())];
+        modal_frame(&mut buf, Rect::new(0, 0, 70, 10), "Тест", &hints, 1.0, Instant::now());
+        let row: String = (0..70).map(|x| buf[(x, 9)].symbol().to_string()).collect();
+        let find = |needle: &str| -> u16 {
+            let cols: Vec<String> = (0..70).map(|x| buf[(x, 9)].symbol().to_string()).collect();
+            (0..70).find(|&x| cols[x as usize..].concat().starts_with(needle)).expect("hint drawn")
+        };
+        let ex = find(" Enter ");
+        let sx = find(" Esc ");
+        assert_eq!(crate::hit::at(ex + 2, 9).expect("Enter target")[0].code, KeyCode::Enter, "row: {row}");
+        assert_eq!(crate::hit::at(sx + 2, 9).expect("Esc target")[0].code, KeyCode::Esc, "row: {row}");
     }
 }

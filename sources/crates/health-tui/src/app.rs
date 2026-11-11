@@ -4,12 +4,12 @@ use crate::commands::{self, SuggestKind, Suggestion};
 use crate::input::{Input, InputAction};
 use crate::transcript::{from_messages, Item, ToolItem, ToolState, Transcript, WelcomeInfo};
 use base64::Engine;
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use health_core::{
     t, tf, AgentCommand, AgentEvent, ContentBlock, Effort, Lang, NoticeLevel, PermissionDecision, PermissionMode, PermissionRequest, StopReason, TodoItem,
     TodoStatus, ToolDisplay,
 };
-use health_theme::{FieldAction, Mascot, Mood, TextField, Toasts};
+use health_theme::{hit, FieldAction, Mascot, Mood, TextField, Toasts};
 use health_ui::{Action, Panel, PanelCtx, PanelFactory, PanelKind, Services};
 use ratatui::layout::Rect;
 use std::collections::VecDeque;
@@ -26,6 +26,28 @@ pub struct OpenPanel {
     pub panel: Box<dyn Panel>,
     pub opened: Instant,
     pub area: Rect,
+}
+
+/// Mouse selection in the chat: `(absolute line, column)` of the anchor and the moving end.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Selection {
+    pub anchor: (usize, u16),
+    pub head: (usize, u16),
+    pub dragging: bool,
+}
+
+impl Selection {
+    /// `(start, end)` in reading order.
+    pub fn ordered(&self) -> ((usize, u16), (usize, u16)) {
+        if self.anchor <= self.head {
+            (self.anchor, self.head)
+        } else {
+            (self.head, self.anchor)
+        }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.anchor == self.head
+    }
 }
 
 pub struct App {
@@ -62,6 +84,14 @@ pub struct App {
     pending_onboarding: bool,
     current_model_key: Option<health_core::ModelRef>,
     pub clear_screen: bool,
+    /// The terminal window has keyboard focus (from focus events).
+    focused: bool,
+    /// Text selection in the chat (mouse drag → copied on release).
+    pub selection: Option<Selection>,
+    /// Chat area of the last frame and the plain text of its visible rows (for selection).
+    pub body: Rect,
+    pub view_start: usize,
+    pub view_rows: Vec<String>,
 }
 
 const MAX_HISTORY: usize = 200;
@@ -104,6 +134,11 @@ impl App {
             pending_onboarding: !cfg.onboarded,
             current_model_key: None,
             clear_screen: false,
+            focused: true,
+            selection: None,
+            body: Rect::default(),
+            view_start: 0,
+            view_rows: Vec::new(),
         };
         app.refresh_welcome();
         app.transcript.push(Item::Welcome);
@@ -188,6 +223,21 @@ impl App {
                     self.panel = None;
                     self.clear_conversation();
                 }
+                Action::ResetAll => {
+                    self.panel = None;
+                    let lang = health_core::l10n::detect_system_lang();
+                    self.services.update_config(|c| *c = health_core::Config { lang, ..Default::default() });
+                    health_core::set_lang(lang);
+                    health_theme::fx::set_animations(true);
+                    self.history.clear();
+                    let _ = std::fs::remove_file(history_file());
+                    let mcp = self.services.mcp.clone();
+                    tokio::spawn(async move { mcp.apply_config().await });
+                    self.clear_conversation();
+                    self.transcript.touch_all();
+                    self.toasts.push(NoticeLevel::Success, t!("Настройки сброшены", "Settings were reset"));
+                    self.open_panel(PanelKind::Onboarding);
+                }
                 Action::Quit => self.quit = true,
             }
         }
@@ -212,6 +262,8 @@ impl App {
             Event::Mouse(m) => self.on_mouse(m),
             Event::Paste(s) => self.on_paste(&s),
             Event::Resize(..) => self.transcript.touch_all(),
+            Event::FocusGained => self.focused = true,
+            Event::FocusLost => self.focused = false,
             _ => {}
         }
     }
@@ -234,17 +286,128 @@ impl App {
     }
 
     fn on_mouse(&mut self, m: MouseEvent) {
+        if self.splash.is_some() {
+            if matches!(m.kind, MouseEventKind::Down(_)) {
+                self.end_splash();
+            }
+            return;
+        }
         if let Some(p) = self.panel.as_mut() {
             let ctx = PanelCtx { services: &self.services, now: Instant::now(), animations: health_theme::fx::animations() };
+            match m.kind {
+                MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
+                    let a = p.panel.on_wheel(m.kind == MouseEventKind::ScrollUp, &ctx);
+                    self.apply_actions(a);
+                    return;
+                }
+                MouseEventKind::Down(MouseButton::Left) => {
+                    // rows, tabs, buttons and key hints of the menu: replay their keys
+                    if let Some(keys) = hit::at(m.column, m.row) {
+                        self.replay(keys);
+                        return;
+                    }
+                }
+                _ => {}
+            }
             let area = p.area;
             let a = p.panel.on_mouse(m, area, &ctx);
             self.apply_actions(a);
             return;
         }
+        let in_body = |b: Rect, x: u16, y: u16| x >= b.x && x < b.right() && y >= b.y && y < b.bottom();
         match m.kind {
             MouseEventKind::ScrollUp => self.scroll = self.scroll.saturating_add(3),
             MouseEventKind::ScrollDown => self.scroll = self.scroll.saturating_sub(3),
+            MouseEventKind::Down(MouseButton::Left) => {
+                if let Some(keys) = hit::at(m.column, m.row) {
+                    self.selection = None;
+                    self.replay(keys);
+                } else if in_body(self.body, m.column, m.row) {
+                    let pos = self.text_pos(m.column, m.row);
+                    self.selection = Some(Selection { anchor: pos, head: pos, dragging: true });
+                } else {
+                    self.selection = None;
+                }
+            }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                if self.selection.map(|s| s.dragging).unwrap_or(false) {
+                    // dragging past the edge scrolls the chat
+                    if m.row < self.body.y {
+                        self.scroll = self.scroll.saturating_add(1);
+                    } else if m.row >= self.body.bottom() {
+                        self.scroll = self.scroll.saturating_sub(1);
+                    }
+                    let pos = self.text_pos(m.column, m.row);
+                    if let Some(s) = self.selection.as_mut() {
+                        s.head = pos;
+                    }
+                }
+            }
+            MouseEventKind::Up(MouseButton::Left) => {
+                if let Some(s) = self.selection.as_mut() {
+                    if s.dragging {
+                        s.dragging = false;
+                        if s.is_empty() {
+                            self.selection = None;
+                        } else {
+                            self.copy_selection();
+                        }
+                    }
+                }
+            }
             _ => {}
+        }
+    }
+
+    /// Screen cell → `(absolute transcript line, column)`, clamped to the chat area.
+    fn text_pos(&self, x: u16, y: u16) -> (usize, u16) {
+        let b = self.body;
+        let row = y.clamp(b.y, b.bottom().saturating_sub(1)).saturating_sub(b.y) as usize;
+        let col = x.clamp(b.x, b.right()).saturating_sub(b.x);
+        (self.view_start + row, col)
+    }
+
+    /// Plain text of the current selection (visible rows only).
+    pub fn selected_text(&self) -> Option<String> {
+        let s = self.selection?;
+        let ((l0, c0), (l1, c1)) = s.ordered();
+        let mut out: Vec<String> = Vec::new();
+        for line in l0..=l1 {
+            let Some(text) = line.checked_sub(self.view_start).and_then(|i| self.view_rows.get(i)) else { continue };
+            let chars: Vec<char> = text.chars().collect();
+            let from = if line == l0 { c0 as usize } else { 0 };
+            let to = if line == l1 { (c1 as usize).min(chars.len()) } else { chars.len() };
+            let piece: String = chars.get(from.min(chars.len())..to.max(from).min(chars.len())).map(|c| c.iter().collect()).unwrap_or_default();
+            out.push(piece.trim_end().to_string());
+        }
+        let text = out.join("\n").trim_matches('\n').to_string();
+        if text.trim().is_empty() {
+            None
+        } else {
+            Some(text)
+        }
+    }
+
+    fn copy_selection(&mut self) {
+        if !self.services.config().ui.copy_on_select {
+            return;
+        }
+        let Some(text) = self.selected_text() else { return };
+        let n = text.chars().count();
+        match arboard::Clipboard::new().and_then(|mut c| c.set_text(text)) {
+            Ok(()) => self.toasts.push(NoticeLevel::Success, tf!("Скопировано: {} симв.", "Copied: {} chars", n)),
+            Err(e) => self.toasts.push(NoticeLevel::Error, format!("{e}")),
+        }
+    }
+
+    /// Replay keys produced by a click (menu rows, buttons, hints) — never treated as a paste burst.
+    fn replay(&mut self, keys: Vec<KeyEvent>) {
+        let had_panel = self.panel.is_some();
+        for k in keys {
+            if had_panel && self.panel.is_none() {
+                break;
+            }
+            self.handle_key(k, false);
         }
     }
 
@@ -252,6 +415,12 @@ impl App {
         let now = Instant::now();
         let burst = now.duration_since(self.last_key) < Duration::from_millis(8);
         self.last_key = now;
+        self.selection = None;
+        self.handle_key(k, burst);
+    }
+
+    fn handle_key(&mut self, k: KeyEvent, burst: bool) {
+        let now = Instant::now();
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
 
         if self.splash.is_some() {
@@ -301,6 +470,15 @@ impl App {
             }
             KeyCode::Char('d') if ctrl && self.input.is_empty() => {
                 self.quit = true;
+                return;
+            }
+            KeyCode::Char('q') | KeyCode::Char('й') if ctrl => {
+                if self.busy {
+                    let _ = self.agent.send(AgentCommand::SoftStop);
+                    self.toasts.push(NoticeLevel::Info, t!("Плавная остановка: прошу модель аккуратно закончить", "Soft stop: asking the model to wind down"));
+                } else {
+                    self.toasts.push(NoticeLevel::Info, t!("Модель сейчас ничего не делает", "The model is idle"));
+                }
                 return;
             }
             KeyCode::Char('o') if ctrl => {
@@ -756,6 +934,11 @@ impl App {
                     }
                 }
             }
+            "customeffort" => self.open_panel(PanelKind::CustomEffort),
+            "agents" => self.open_panel(PanelKind::Agents),
+            "login" => self.open_panel(PanelKind::Login),
+            "logout" => self.logout(),
+            "reset" => self.open_panel(PanelKind::Reset),
             "copy" => {
                 let last = self.transcript.items.iter().rev().find_map(|i| if let Item::Assistant { text, .. } = i { Some(text.clone()) } else { None });
                 match last {
@@ -769,6 +952,32 @@ impl App {
             "exit" => self.quit = true,
             _ => {}
         }
+    }
+
+    /// Forget the Health account and its key on this computer.
+    fn logout(&mut self) {
+        let removed = self.services.update_config(|c| match c.account.take() {
+            Some(acc) => {
+                c.keys.retain(|k| k.id != acc.key_id);
+                if c.current_model.as_ref().map(|m| m.provider == health_core::ProviderKind::HealthCloud).unwrap_or(false) {
+                    c.current_model = None;
+                }
+                Some(acc.email)
+            }
+            None => None,
+        });
+        match removed {
+            Some(email) => {
+                self.toasts.push(NoticeLevel::Success, tf!("Вы вышли из аккаунта {}", "Signed out of {}", email));
+                self.refresh_welcome();
+            }
+            None => self.toasts.push(NoticeLevel::Info, t!("Вход через Health не выполнен — /login", "Not signed in to Health — /login")),
+        }
+    }
+
+    /// The window is minimized or another window has the focus.
+    fn in_background(&self) -> bool {
+        !self.focused || crate::notify::window_minimized()
     }
 
     fn refresh_models_async(&mut self) {
@@ -836,12 +1045,26 @@ impl App {
                 self.mascot.set_mood(Mood::Thinking);
             }
             AgentEvent::ThinkingDelta(t) => match self.transcript.items.last_mut() {
-                Some(Item::Thinking { text, ended: None, .. }) => text.push_str(&t),
+                Some(Item::Thinking { text, ended: None, custom: false, .. }) => text.push_str(&t),
                 _ => {
+                    self.end_thinking();
                     self.finish_streaming();
-                    self.transcript.push(Item::Thinking { text: t, started: Instant::now(), ended: None })
+                    self.transcript.push(Item::Thinking { text: t, started: Instant::now(), ended: None, custom: false })
                 }
             },
+            AgentEvent::ReasoningDelta(t) => match self.transcript.items.last_mut() {
+                Some(Item::Thinking { text, ended: None, custom: true, .. }) => text.push_str(&t),
+                _ => {
+                    self.end_thinking();
+                    self.finish_streaming();
+                    self.transcript.push(Item::Thinking { text: t, started: Instant::now(), ended: None, custom: true })
+                }
+            },
+            // the reasoning switch itself is not shown as a tool call
+            AgentEvent::ToolCallStarted { name, .. } | AgentEvent::ToolCallReady { name, .. } if name == "custom_reasoning" => {
+                self.end_thinking();
+                self.finish_streaming();
+            }
             AgentEvent::ToolCallStarted { call_id, name } => {
                 self.end_thinking();
                 self.finish_streaming();
@@ -890,6 +1113,9 @@ impl App {
                     t.state = ToolState::Waiting;
                     self.transcript.touch(i);
                 }
+                if self.services.config().ui.notify_done && self.in_background() {
+                    crate::notify::show("Health", &tf!("Нужно ваше решение: {}", "Your decision is needed: {}", req.title));
+                }
                 self.mascot.set_mood(Mood::Listening);
                 self.scroll = 0;
                 self.perm = Some(Perm { req, sel: 0, feedback: None });
@@ -931,6 +1157,13 @@ impl App {
                 self.finish_streaming();
                 self.end_thinking();
             }
+            AgentEvent::SubUsage { model, usage } => {
+                let mut s = self.services.session.write();
+                s.total.add(&usage);
+                let e = s.per_model.entry(model.key()).or_insert_with(|| (model.clone(), Default::default()));
+                e.1.add(&usage);
+            }
+            AgentEvent::SoftStopping => self.mascot.set_mood(Mood::Listening),
             AgentEvent::Usage { last, total, context_tokens } => {
                 self.turn_tokens += last.output_tokens;
                 let mut s = self.services.session.write();
@@ -941,9 +1174,20 @@ impl App {
                     e.1.add(&last);
                 }
             }
-            AgentEvent::TurnFinished { stop, .. } => {
+            AgentEvent::TurnFinished { stop, elapsed_ms } => {
                 self.finish_streaming();
                 self.end_thinking();
+                if self.services.config().ui.notify_done && elapsed_ms >= 1500 && self.in_background() {
+                    let last = self.transcript.items.iter().rev().find_map(|i| if let Item::Assistant { text, .. } = i { Some(text.clone()) } else { None });
+                    let body = match &stop {
+                        StopReason::Cancelled => t!("Ответ прерван", "The answer was interrupted").to_string(),
+                        _ => last
+                            .map(|t| health_core::util::truncate_chars(t.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim_start_matches('#').trim(), 120))
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or_else(|| t!("Модель закончила работу", "The model has finished").to_string()),
+                    };
+                    crate::notify::show(t!("Health — готово", "Health — done"), &body);
+                }
                 self.busy = false;
                 self.turn_started = None;
                 self.current_tool = None;

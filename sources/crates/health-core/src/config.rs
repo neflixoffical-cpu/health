@@ -37,6 +37,12 @@ pub struct Config {
     pub shell: ShellKind,
     /// The user's OWN optional system prompt. Health never adds one. Empty/None = nothing sent.
     pub custom_system_prompt: Option<String>,
+    /// `/customeffort`: the user's own effort levels with their own prompts (off by default).
+    pub custom_effort: CustomEffortConfig,
+    /// `/agents`: user-defined sub-agents the model can delegate tasks to.
+    pub agents: AgentsConfig,
+    /// Signed in with a Health Cloud account (`/login`).
+    pub account: Option<HealthAccount>,
 }
 
 impl Default for Config {
@@ -58,7 +64,147 @@ impl Default for Config {
             ui: UiConfig::default(),
             shell: ShellKind::PowerShell,
             custom_system_prompt: None,
+            custom_effort: CustomEffortConfig::default(),
+            agents: AgentsConfig::default(),
+            account: None,
         }
+    }
+}
+
+// ───────────────────────────── /customeffort ─────────────────────────────
+
+/// One user-defined effort level: a name, the user's own prompt for it, and the API effort to send.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct CustomEffortLevel {
+    /// Stable id (survives renames).
+    pub id: String,
+    pub name: String,
+    /// Sent as the system prompt while this level is active (after the user's `/system` prompt).
+    pub prompt: String,
+    /// Reasoning effort passed to the provider for this level.
+    pub effort: Effort,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CustomEffortConfig {
+    /// Master switch (off by default: Health sends no prompts of its own).
+    pub enabled: bool,
+    pub levels: Vec<CustomEffortLevel>,
+    /// `CustomEffortLevel::id` of the active level.
+    pub selected: Option<String>,
+    /// Models the custom levels apply to (`ModelRef::key()`); empty = every model.
+    pub models: Vec<String>,
+    /// Give the model the `custom_reasoning` tool (open / close a visible reasoning block).
+    pub reasoning_tool: bool,
+}
+
+impl Default for CustomEffortConfig {
+    fn default() -> Self {
+        let levels = Effort::all()
+            .iter()
+            .filter(|e| **e != Effort::Auto)
+            .map(|e| CustomEffortLevel { id: e.wire().unwrap_or("off").to_string(), name: e.label().to_string(), prompt: String::new(), effort: *e })
+            .collect();
+        CustomEffortConfig { enabled: false, levels, selected: Some("high".into()), models: Vec::new(), reasoning_tool: true }
+    }
+}
+
+impl CustomEffortConfig {
+    pub fn applies_to(&self, m: &ModelRef) -> bool {
+        self.enabled && (self.models.is_empty() || self.models.iter().any(|k| *k == m.key()))
+    }
+    pub fn level(&self, id: &str) -> Option<&CustomEffortLevel> {
+        self.levels.iter().find(|l| l.id == id)
+    }
+    pub fn selected_level(&self) -> Option<&CustomEffortLevel> {
+        self.selected.as_deref().and_then(|id| self.level(id))
+    }
+    /// A fresh unique id for a new level.
+    pub fn new_id(&self) -> String {
+        loop {
+            let id = format!("lvl-{}", util::short_id());
+            if self.level(&id).is_none() {
+                return id;
+            }
+        }
+    }
+}
+
+// ───────────────────────────── /agents ─────────────────────────────
+
+/// A sub-agent: its own prompt, optional model and effort, and the tools it may use.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct AgentDef {
+    /// `[a-z0-9_-]` name the model uses to call it.
+    pub name: String,
+    /// When the main model should use it (shown to the model in the `agent` tool description).
+    pub description: String,
+    /// System prompt of the sub-agent (the user's text).
+    pub prompt: String,
+    /// `None` = the current model.
+    pub model: Option<ModelRef>,
+    pub effort: Option<Effort>,
+    /// Allowed tool names; empty = every tool except `agent`.
+    pub tools: Vec<String>,
+    pub enabled: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AgentsConfig {
+    /// Offer the `agent` tool to the model.
+    pub tool_enabled: bool,
+    pub list: Vec<AgentDef>,
+}
+
+impl Default for AgentsConfig {
+    fn default() -> Self {
+        AgentsConfig { tool_enabled: true, list: Vec::new() }
+    }
+}
+
+impl AgentsConfig {
+    pub fn get(&self, name: &str) -> Option<&AgentDef> {
+        self.list.iter().find(|a| a.name.eq_ignore_ascii_case(name))
+    }
+}
+
+/// Normalize an agent name to `[a-z0-9_-]`, max 40 chars.
+pub fn agent_slug(s: &str) -> String {
+    let mut out = String::new();
+    for c in s.trim().to_lowercase().chars() {
+        if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+            out.push(c);
+        } else if (c.is_whitespace() || c == '.') && !out.ends_with('-') {
+            out.push('-');
+        }
+    }
+    out.trim_matches('-').chars().take(40).collect()
+}
+
+// ───────────────────────────── Health Cloud account ─────────────────────────────
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct HealthAccount {
+    pub email: String,
+    pub name: String,
+    /// `free` / `pro` / `team`.
+    pub plan: String,
+    pub plan_name: String,
+    /// Monthly token allowance of the plan.
+    pub tokens_limit: u64,
+    /// `ApiKey::id` of the key issued for this computer.
+    pub key_id: String,
+    pub connected_at: i64,
+}
+
+impl HealthAccount {
+    pub fn is_free(&self) -> bool {
+        self.plan.is_empty() || self.plan == "free"
     }
 }
 
@@ -337,11 +483,15 @@ pub struct UiConfig {
     pub fps: u16,
     /// Collapse long tool outputs.
     pub compact_tools: bool,
+    /// Windows notification when an answer finishes while the window is minimized or in the background.
+    pub notify_done: bool,
+    /// Selecting text in the chat with the mouse copies it on release.
+    pub copy_on_select: bool,
 }
 
 impl Default for UiConfig {
     fn default() -> Self {
-        UiConfig { animations: true, splash: true, show_thinking: true, mouse: true, fps: 30, compact_tools: true }
+        UiConfig { animations: true, splash: true, show_thinking: true, mouse: true, fps: 30, compact_tools: true, notify_done: true, copy_on_select: true }
     }
 }
 
@@ -411,6 +561,44 @@ impl Config {
     pub fn system_prompt(&self) -> Option<String> {
         self.custom_system_prompt.clone().filter(|s| !s.trim().is_empty())
     }
+
+    /// The custom effort level in force for `model` (only when `/customeffort` is on for it).
+    pub fn custom_level_for(&self, model: &ModelRef) -> Option<&CustomEffortLevel> {
+        if self.custom_effort.applies_to(model) {
+            self.custom_effort.selected_level()
+        } else {
+            None
+        }
+    }
+
+    /// Effort sent with requests to `model`: the custom level's effort when `/customeffort` applies.
+    pub fn effort_for(&self, model: &ModelRef) -> Effort {
+        self.custom_level_for(model).map(|l| l.effort).unwrap_or(self.effort)
+    }
+
+    /// System prompt for `model`: the user's own `/system` text plus the active custom level's prompt.
+    /// Both are written by the user; without them nothing is sent.
+    pub fn system_prompt_for(&self, model: &ModelRef) -> Option<String> {
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(s) = self.system_prompt() {
+            parts.push(s);
+        }
+        if let Some(l) = self.custom_level_for(model) {
+            if !l.prompt.trim().is_empty() {
+                parts.push(l.prompt.trim().to_string());
+            }
+        }
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join("\n\n"))
+        }
+    }
+
+    /// The `custom_reasoning` tool is offered only while `/customeffort` is on for `model`.
+    pub fn custom_reasoning_for(&self, model: &ModelRef) -> bool {
+        self.custom_effort.applies_to(model) && self.custom_effort.reasoning_tool
+    }
 }
 
 /// Convenience: load into a [`SharedConfig`].
@@ -421,6 +609,29 @@ pub fn load_shared() -> SharedConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn custom_effort_applies_only_when_enabled() {
+        let mut c = Config::default();
+        let m = ModelRef::new(ProviderKind::OpenAI, "gpt-5.5");
+        let other = ModelRef::new(ProviderKind::OpenAI, "gpt-5.4-mini");
+        c.effort = Effort::Low;
+        assert_eq!(c.effort_for(&m), Effort::Low);
+        assert_eq!(c.system_prompt_for(&m), None, "nothing is sent by default");
+        c.custom_effort.enabled = true;
+        c.custom_effort.models = vec![m.key()];
+        c.custom_effort.selected = Some("max".into());
+        if let Some(l) = c.custom_effort.levels.iter_mut().find(|l| l.id == "max") {
+            l.prompt = "Think very carefully.".into();
+        }
+        c.custom_system_prompt = Some("Be brief.".into());
+        assert_eq!(c.effort_for(&m), Effort::Max);
+        assert_eq!(c.system_prompt_for(&m).as_deref(), Some("Be brief.\n\nThink very carefully."));
+        assert!(c.custom_reasoning_for(&m));
+        assert_eq!(c.effort_for(&other), Effort::Low, "other models keep the normal effort");
+        assert!(!c.custom_reasoning_for(&other));
+        assert_eq!(agent_slug("Code Reviewer!"), "code-reviewer");
+    }
+
     #[test]
     fn defaults_roundtrip() {
         let mut c = Config::default();

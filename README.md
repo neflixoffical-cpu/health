@@ -24,7 +24,7 @@
 
 ```console
 PS C:\projects\api> health
-  ✚  Health 1.0.0 · gpt-5.1 · ключей 4
+  ✚  Health 1.1.0 · gpt-5.5 · Health Cloud
   › почини падающие тесты в src/net.rs
 ```
 
@@ -90,13 +90,33 @@ stdio или HTTP, а готовый JSON-конфиг можно просто �
 
 </td>
 </tr>
+<tr>
+<td width="50%" valign="top">
+
+**Свои агенты**
+
+`/agents` — создайте агента со своим промптом, моделью, effort и набором инструментов.
+Основная модель запускает их через инструмент `agent`: каждый работает в отдельном контексте
+и возвращает только итог, а запросы разрешений приходят вам.
+
+</td>
+<td width="50%" valign="top">
+
+**Свой effort**
+
+`/customeffort` — переименуйте уровни, удалите лишние, напишите к каждому свой промпт и выберите
+модели, на которые это действует. Инструмент `custom_reasoning` позволяет модели самой открывать
+и закрывать блок «Раздумье».
+
+</td>
+</tr>
 </table>
 
 <details>
 <summary><b>Провайдеры из коробки</b></summary>
 <br>
 
-Anthropic · OpenAI · OpenRouter · Google Gemini · Groq · DeepSeek · Mistral · xAI · Together · Fireworks ·
+Health Cloud (вход через аккаунт: `/login`) · Anthropic · OpenAI · OpenRouter · Google Gemini · Groq · DeepSeek · Mistral · xAI · Together · Fireworks ·
 Cerebras · Moonshot · Z.ai · NVIDIA · Hugging Face · любой OpenAI- или Anthropic-совместимый сервер ·
 Ollama · встроенный llama.cpp.
 
@@ -112,7 +132,8 @@ Ollama · встроенный llama.cpp.
 
 Большинство агентов незаметно добавляют к каждому запросу несколько тысяч токенов своих инструкций.
 Health не добавляет ничего. Модель получает только ваши сообщения, описания инструментов и, если вы
-сами его задали через `/system`, ваш собственный системный промпт.
+сами его задали через `/system`, ваш собственный системный промпт. Промпт уровня из `/customeffort`
+тоже ваш: он отправляется, только если вы его написали и включили кастомный effort.
 
 ```diff
   POST /v1/chat/completions
@@ -132,6 +153,14 @@ Health не добавляет ничего. Модель получает то�
 
 <img src="docs/assets/h-install.svg" width="100%" alt="Установка">
 
+Одной командой в PowerShell:
+
+```powershell
+irm https://health-ai.lol/install.ps1 | iex
+```
+
+Или вручную:
+
 1. Скачайте `HealthSetup.exe` со страницы [**Releases**](https://github.com/neflixoffical-cpu/health/releases) или соберите его сами ([как](#build)).
 2. Запустите установщик. По умолчанию Health ставится в `%LOCALAPPDATA%\Programs\Health`.
    Установщик добавляет папку в `PATH`, создаёт ярлык в «Пуске» и запись в «Приложениях».
@@ -141,7 +170,8 @@ Health не добавляет ничего. Модель получает то�
 health
 ```
 
-При первом запуске мастер спросит язык (русский или English) и предложит добавить ключ или скачать
+При первом запуске мастер спросит язык (русский или English) и предложит войти через Health
+(в браузере, как в других CLI-агентах; подписка подгружается сама), добавить ключ или скачать
 локальную модель. Ключ проверяется сразу: Health запрашивает у провайдера список моделей.
 
 <details>
@@ -171,6 +201,10 @@ health
 | `/model` · `/model <id>` | выбрать модель (поиск, избранное, ручное добавление) или переключиться сразу |
 | `/keys` | API-ключи: добавить, проверить, включить и выключить, удалить (до 20) |
 | `/effort [уровень]` | глубина рассуждений: авто · выкл · низкий · средний · высокий · очень высокий · максимум |
+| `/customeffort` | свои уровни effort: названия, промпты, модели, инструмент `custom_reasoning` |
+| `/agents` | свои агенты: промпт, модель, effort, инструменты; инструмент `agent` вкл/выкл |
+| `/login` · `/logout` | войти через аккаунт Health Cloud · выйти |
+| `/reset` | полностью сбросить настройки (подтверждение словом `healthreset`) |
 | `/mode` | режим разрешений: спрашивать · авто-правки · без подтверждений |
 | `/mcp` | MCP-серверы: команда или URL, импорт JSON, проверка, логи, доверие |
 | `/skills` · `/<скилл> [аргументы]` | управление скиллами и их запуск |
@@ -188,13 +222,16 @@ health
 | <kbd>Enter</kbd> | отправить |
 | <kbd>Shift</kbd>+<kbd>Enter</kbd> · <kbd>Ctrl</kbd>+<kbd>J</kbd> · <kbd>\\</kbd> <kbd>Enter</kbd> | новая строка |
 | <kbd>Esc</kbd> | прервать ответ |
+| <kbd>Ctrl</kbd>+<kbd>Q</kbd> | плавная остановка: модель прерывается и аккуратно сворачивает начатое |
 | <kbd>Shift</kbd>+<kbd>Tab</kbd> | режим разрешений |
 | <kbd>Ctrl</kbd>+<kbd>O</kbd> | развернуть размышления и вывод инструментов |
 | <kbd>@</kbd> | подсказка файлов проекта |
 | <kbd>PgUp</kbd> <kbd>PgDn</kbd> · колесо мыши | прокрутка |
 | <kbd>Ctrl</kbd>+<kbd>C</kbd> ×2 | выход |
 
-Чтобы выделить текст мышью, удерживайте <kbd>Shift</kbd>.
+Мышь работает везде: строки меню, вкладки, подсказки клавиш и кнопки нажимаются кликом.
+Выделенный мышью текст в ленте копируется сам, как только вы отпустите кнопку.
+Если ответ готов, а окно свёрнуто или в фоне, Windows покажет уведомление.
 
 </details>
 
@@ -255,7 +292,7 @@ flowchart LR
 |---|---|
 | `health` | точка входа: аргументы, режим `-p`, сборка всего вместе |
 | `health-tui` | полноэкранный интерфейс: лента, markdown, ввод, палитра команд |
-| `health-panels-a` · `health-panels-b` | окна: модели, ключи, effort, режимы, настройки, MCP, скиллы, локальные модели |
+| `health-panels-a` · `health-panels-b` | окна: модели, ключи, effort, кастомный effort, агенты, вход, сброс, режимы, настройки, MCP, скиллы, локальные модели |
 | `health-ui` | общий интерфейс панелей |
 | `health-agent` | цикл агента: стриминг, вызовы инструментов, разрешения, сохранение диалогов |
 | `health-providers` | Anthropic Messages API и OpenAI-совместимые API, пул ключей, авто-парсинг моделей |
@@ -291,7 +328,8 @@ flowchart LR
 **Health** is a full-screen AI coding agent for the Windows terminal. It edits files, runs PowerShell,
 searches your code and asks before anything risky. Use up to 20 API keys from different providers (with
 automatic failover) or run GGUF models locally through llama.cpp, which Health downloads for you. It supports
-MCP servers, `SKILL.md` skills and seven reasoning-effort levels. **No hidden system prompt:** the model sees
+MCP servers, `SKILL.md` skills, custom agents (`/agents`), custom effort levels with your own prompts
+(`/customeffort`), sign-in with a Health Cloud account (`/login`), mouse control and soft stop (Ctrl+Q). **No hidden system prompt:** the model sees
 only your messages, the tool definitions and your own `/system` prompt if you set one.
 The UI is available in Russian and English (`/lang en`).
 

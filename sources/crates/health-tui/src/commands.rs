@@ -22,6 +22,10 @@ pub const COMMANDS: &[CommandSpec] = &[
     CommandSpec { name: "model", aliases: &["models"], ru: "Выбрать модель (или /model <id>)", en: "Pick a model (or /model <id>)" },
     CommandSpec { name: "keys", aliases: &["key", "apikey"], ru: "API-ключи: добавить, проверить, удалить", en: "API keys: add, check, remove" },
     CommandSpec { name: "effort", aliases: &[], ru: "Глубина рассуждений модели", en: "Model reasoning effort" },
+    CommandSpec { name: "customeffort", aliases: &["custom-effort", "ceffort"], ru: "Свои уровни effort: промпты, названия, модели", en: "Your own effort levels: prompts, names, models" },
+    CommandSpec { name: "agents", aliases: &["agent"], ru: "Агенты: создать помощников для модели", en: "Agents: sub-agents the model can delegate to" },
+    CommandSpec { name: "login", aliases: &["signin"], ru: "Войти через аккаунт Health (в браузере)", en: "Sign in with a Health account (in the browser)" },
+    CommandSpec { name: "logout", aliases: &["signout"], ru: "Выйти из аккаунта Health", en: "Sign out of Health" },
     CommandSpec { name: "localmodel", aliases: &["local"], ru: "Локальные модели: каталог, загрузка, запуск", en: "Local models: catalog, download, run" },
     CommandSpec { name: "mcp", aliases: &[], ru: "MCP-серверы", en: "MCP servers" },
     CommandSpec { name: "skills", aliases: &["skill"], ru: "Скиллы: установить, создать, запустить", en: "Skills: install, create, run" },
@@ -34,6 +38,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     CommandSpec { name: "lang", aliases: &["language"], ru: "Язык интерфейса", en: "Interface language" },
     CommandSpec { name: "cwd", aliases: &["cd"], ru: "Рабочая папка", en: "Working directory" },
     CommandSpec { name: "copy", aliases: &[], ru: "Скопировать последний ответ", en: "Copy the last answer" },
+    CommandSpec { name: "reset", aliases: &[], ru: "Сбросить все настройки (с подтверждением)", en: "Reset all settings (asks to confirm)" },
     CommandSpec { name: "help", aliases: &["?"], ru: "Справка и горячие клавиши", en: "Help and shortcuts" },
     CommandSpec { name: "exit", aliases: &["quit", "q"], ru: "Выход", en: "Quit" },
 ];

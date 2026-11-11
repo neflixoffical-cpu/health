@@ -776,6 +776,7 @@ impl LocalPanel {
                 DlState::Cancelled => (t!("отменено", "cancelled").to_string(), TEXT_MUTED),
             };
             if let Some(y) = row(area, top) {
+                health_theme::hit::register(Rect { x: area.x, y, width: area.width, height: 3.min(area.height.saturating_sub(top)) }, health_theme::hit::move_keys(self.dl_sel, k, false));
                 if sel {
                     highlight(buf, Rect { x: area.x, y, width: area.width, height: 3.min(area.height.saturating_sub(top)) });
                 }
@@ -844,6 +845,9 @@ impl LocalPanel {
         for (i, (label, value, note)) in rows.iter().enumerate() {
             let Some(y) = row(area, i as u16 * 2) else { break };
             let sel = i == self.set_sel;
+            if self.editing.is_none() {
+                health_theme::hit::row(Rect::new(area.x, y, area.width, 1), self.set_sel, i);
+            }
             if sel {
                 highlight(buf, Rect::new(area.x, y, area.width, 1));
             }

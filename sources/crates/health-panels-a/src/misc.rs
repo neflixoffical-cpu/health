@@ -17,12 +17,27 @@ use ratatui::Frame;
 pub struct EffortPanel {
     services: Services,
     sel: usize,
+    /// `/customeffort` is on for the current model: choose among the user's own levels.
+    custom: bool,
 }
 
 impl EffortPanel {
     pub fn new(s: &Services) -> Self {
-        let cur = s.config().effort;
-        EffortPanel { services: s.clone(), sel: Effort::all().iter().position(|e| *e == cur).unwrap_or(0) }
+        let cfg = s.config();
+        let custom = cfg.current_model.as_ref().map(|m| cfg.custom_effort.applies_to(m)).unwrap_or(false) && !cfg.custom_effort.levels.is_empty();
+        let sel = if custom {
+            cfg.custom_effort.levels.iter().position(|l| Some(&l.id) == cfg.custom_effort.selected.as_ref()).unwrap_or(0)
+        } else {
+            Effort::all().iter().position(|e| *e == cfg.effort).unwrap_or(0)
+        };
+        EffortPanel { services: s.clone(), sel, custom }
+    }
+    fn len(&self) -> usize {
+        if self.custom {
+            self.services.config().custom_effort.levels.len().max(1)
+        } else {
+            Effort::all().len()
+        }
     }
 }
 
@@ -34,13 +49,27 @@ impl Panel for EffortPanel {
         (84, 20)
     }
     fn hints(&self) -> Vec<KeyHint> {
-        hints(&[("↑↓", t!("уровень", "level")), ("Enter", t!("применить", "apply")), ("Esc", t!("закрыть", "close"))])
+        hints(&[("↑↓", t!("уровень", "level")), ("Enter", t!("применить", "apply")), ("C", t!("свои уровни", "custom levels")), ("Esc", t!("закрыть", "close"))])
     }
     fn on_key(&mut self, k: KeyEvent, _ctx: &PanelCtx) -> Vec<Action> {
-        let n = Effort::all().len();
+        let n = self.len();
         match k.code {
             KeyCode::Up | KeyCode::Left => self.sel = (self.sel + n - 1) % n,
             KeyCode::Down | KeyCode::Right => self.sel = (self.sel + 1) % n,
+            KeyCode::Char('c') | KeyCode::Char('с') => return vec![Action::OpenPanel(health_ui::PanelKind::CustomEffort)],
+            KeyCode::Enter if self.custom => {
+                let sel = self.sel;
+                let name = self.services.update_config(|c| {
+                    let l = c.custom_effort.levels.get(sel)?;
+                    let (id, name) = (l.id.clone(), l.name.clone());
+                    c.custom_effort.selected = Some(id);
+                    Some(name)
+                });
+                return match name {
+                    Some(n) => vec![Action::success(tf!("Effort: {}", "Effort: {}", n)), Action::ConfigChanged, Action::Close],
+                    None => vec![Action::Close],
+                };
+            }
             KeyCode::Enter => {
                 let e = Effort::all()[self.sel];
                 self.services.update_config(|c| c.effort = e);
@@ -55,8 +84,34 @@ impl Panel for EffortPanel {
         let buf = f.buffer_mut();
         let cfg = self.services.config();
         let mut y = area.y;
+        if self.custom {
+            for (i, l) in cfg.custom_effort.levels.iter().enumerate() {
+                let sel = i == self.sel;
+                health_theme::hit::row(Rect::new(area.x, y, area.width, 1), self.sel, i);
+                if sel {
+                    highlight(buf, Rect::new(area.x, y, area.width, 1));
+                }
+                let mut spans = vec![Span::styled(if sel { "▌ " } else { "  " }, Style::new().fg(NEON))];
+                spans.extend(effort_bars(l.effort.level()));
+                spans.push(Span::styled(format!("  {:<18}", ellipsize(&l.name, 18)), if sel { Style::new().fg(TEXT).add_modifier(Modifier::BOLD) } else { Style::new().fg(TEXT_DIM) }));
+                let prompt = l.prompt.split_whitespace().collect::<Vec<_>>().join(" ");
+                let detail = if prompt.is_empty() { l.effort.description().to_string() } else { format!("«{}»", ellipsize(&prompt, (area.width as usize).saturating_sub(40).max(8))) };
+                spans.push(Span::styled(detail, Style::new().fg(TEXT_MUTED)));
+                if cfg.custom_effort.selected.as_deref() == Some(l.id.as_str()) {
+                    spans.push(Span::styled(format!("  {}", t!("● сейчас", "● current")), Style::new().fg(NEON)));
+                }
+                put_line(buf, area.x, y, area.width, &Line::from(spans));
+                y += 1;
+            }
+            y += 1;
+            for (i, l) in wrap(t!("Это ваши уровни из /customeffort для текущей модели. Изменить названия и промпты — C или /customeffort.", "These are your /customeffort levels for the current model. Edit names and prompts — C or /customeffort."), area.width.saturating_sub(2) as usize).iter().enumerate() {
+                dim(buf, area.x + 2, y + i as u16, area.width.saturating_sub(2), l);
+            }
+            return;
+        }
         for (i, e) in Effort::all().iter().enumerate() {
             let sel = i == self.sel;
+            health_theme::hit::row(Rect::new(area.x, y, area.width, 1), self.sel, i);
             if sel {
                 highlight(buf, Rect::new(area.x, y, area.width, 1));
             }
@@ -134,6 +189,7 @@ impl Panel for ModePanel {
         let cur = self.services.config().permission_mode;
         for (i, m) in MODES.iter().enumerate() {
             let y = area.y + i as u16 * 2;
+            health_theme::hit::row(Rect::new(area.x, y, area.width, 2), self.sel, i);
             if i == self.sel {
                 highlight(buf, Rect::new(area.x, y, area.width, 1));
             }
@@ -163,6 +219,9 @@ impl HelpPanel {
             row("/model [id]", t!("выбрать модель или переключиться сразу", "pick a model or switch directly")),
             row("/keys", t!("API-ключи (до 20, ротация при лимитах)", "API keys (up to 20, rotation on limits)")),
             row("/effort [уровень]", t!("глубина рассуждений модели", "model reasoning effort")),
+            row("/customeffort", t!("свои уровни effort: промпты, названия, модели", "your own effort levels: prompts, names, models")),
+            row("/agents", t!("агенты, которых модель может запускать", "agents the model can start")),
+            row("/login, /logout", t!("войти через аккаунт Health / выйти", "sign in with a Health account / sign out")),
             row("/localmodel", t!("скачать и запустить модель на своём ПК", "download and run a model on your PC")),
             row("/mcp, /mcp add <имя> <cmd>", t!("MCP-серверы", "MCP servers")),
             row("/skills, /<скилл> [аргументы]", t!("скиллы", "skills")),
@@ -173,14 +232,17 @@ impl HelpPanel {
             row("/system [текст|clear]", t!("свой системный промпт (по умолчанию нет)", "your own system prompt (none by default)")),
             row("/lang ru|en, /cwd <папка>", t!("язык, рабочая папка", "language, working directory")),
             row("/copy, /exit", t!("скопировать ответ, выход", "copy the answer, quit")),
+            row("/reset", t!("сбросить все настройки (ввести healthreset)", "reset all settings (type healthreset)")),
             Line::default(),
             h(t!("Клавиши", "Keys")),
             row("Enter", t!("отправить", "send")),
             row("Shift+Enter · Ctrl+J · \\ + Enter", t!("новая строка", "new line")),
             row("Esc", t!("прервать ответ / закрыть", "interrupt / close")),
+            row("Ctrl+Q", t!("плавная остановка: модель аккуратно заканчивает", "soft stop: the model winds down cleanly")),
             row("Shift+Tab", t!("режим: спрашивать → авто-правки → без подтверждений", "mode: ask → auto edits → bypass")),
             row("Ctrl+O", t!("развернуть размышления и вывод инструментов", "expand thinking and tool output")),
-            row("PgUp/PgDn, колесо мыши", t!("прокрутка (Shift + мышь — выделение текста)", "scroll (Shift + mouse to select text)")),
+            row("PgUp/PgDn, колесо мыши", t!("прокрутка", "scroll")),
+            row(t!("Мышь", "Mouse"), t!("выделите текст — скопируется сам; кнопки и пункты меню нажимаются", "select text — it is copied; menu items and buttons are clickable")),
             row("↑ / ↓", t!("история сообщений", "message history")),
             row("@путь", t!("приложить файл или картинку", "attach a file or image")),
             row("Ctrl+C ×2, Ctrl+D", t!("выход", "quit")),

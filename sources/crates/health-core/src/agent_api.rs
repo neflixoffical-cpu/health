@@ -19,6 +19,9 @@ pub enum AgentCommand {
     },
     /// Stop the current turn (streaming and running tools) as fast as possible.
     Cancel,
+    /// "Soft stop" (Ctrl+Q): interrupt like `Cancel`, then ask the model in a follow-up message to
+    /// wind down calmly — stop what it started, leave files consistent and report where it stopped.
+    SoftStop,
     /// Start a new empty conversation (the old one stays saved on disk).
     Reset,
     /// Replace the conversation with a saved one (`/resume`).
@@ -63,6 +66,8 @@ pub enum AgentEvent {
     Notice { level: NoticeLevel, text: String },
     TextDelta(String),
     ThinkingDelta(String),
+    /// Text the model writes inside its own `custom_reasoning` block (shown as "Раздумье").
+    ReasoningDelta(String),
     /// Tool call began streaming from the model.
     ToolCallStarted { call_id: String, name: String },
     /// Tool input is still streaming (`bytes` received so far) — UI can show "writing 12 KB…".
@@ -78,6 +83,10 @@ pub enum AgentEvent {
     AssistantMessage(Message),
     /// `last` = this request, `total` = conversation; `context_tokens` = prompt size of last request.
     Usage { last: Usage, total: Usage, context_tokens: u64 },
+    /// Tokens spent by a sub-agent (counted in the session cost, not in the context gauge).
+    SubUsage { model: ModelRef, usage: Usage },
+    /// The soft stop interrupted the model and asked it to wind down.
+    SoftStopping,
     TurnFinished { stop: StopReason, elapsed_ms: u64 },
     Error { kind: ChatErrorKind, message: String, hint: Option<String> },
     /// Conversation was reset / loaded; UI should rebuild the transcript from `messages`.

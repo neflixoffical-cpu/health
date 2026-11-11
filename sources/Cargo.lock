@@ -790,7 +790,7 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "health"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -813,7 +813,7 @@ dependencies = [
 
 [[package]]
 name = "health-agent"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -828,7 +828,7 @@ dependencies = [
 
 [[package]]
 name = "health-core"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -847,7 +847,7 @@ dependencies = [
 
 [[package]]
 name = "health-icon"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "embed-resource",
  "png 0.17.16",
@@ -855,7 +855,7 @@ dependencies = [
 
 [[package]]
 name = "health-local"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -877,7 +877,7 @@ dependencies = [
 
 [[package]]
 name = "health-mcp"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -894,7 +894,7 @@ dependencies = [
 
 [[package]]
 name = "health-panels-a"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -903,8 +903,11 @@ dependencies = [
  "health-icon",
  "health-theme",
  "health-ui",
+ "open",
  "parking_lot",
  "ratatui",
+ "reqwest",
+ "serde",
  "serde_json",
  "tokio",
  "unicode-width 0.2.0",
@@ -912,7 +915,7 @@ dependencies = [
 
 [[package]]
 name = "health-panels-b"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -931,7 +934,7 @@ dependencies = [
 
 [[package]]
 name = "health-providers"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -948,7 +951,7 @@ dependencies = [
 
 [[package]]
 name = "health-setup"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -965,7 +968,7 @@ dependencies = [
 
 [[package]]
 name = "health-skills"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -979,7 +982,7 @@ dependencies = [
 
 [[package]]
 name = "health-theme"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "crossterm",
  "health-core",
@@ -990,7 +993,7 @@ dependencies = [
 
 [[package]]
 name = "health-tools"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1012,7 +1015,7 @@ dependencies = [
 
 [[package]]
 name = "health-tui"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "arboard",
@@ -1022,21 +1025,24 @@ dependencies = [
  "futures-util",
  "health-core",
  "health-icon",
+ "health-panels-a",
  "health-theme",
  "health-ui",
  "ignore",
  "parking_lot",
  "pulldown-cmark",
  "ratatui",
+ "reqwest",
  "serde_json",
  "tokio",
  "tokio-util",
  "unicode-width 0.2.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
 name = "health-ui"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "crossterm",
@@ -1382,6 +1388,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "791930b43c0d5973160d90a8f3894509f2b273430f5c5c73b668636d0287c5c0"
 
 [[package]]
+name = "is-docker"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "928bae27f42bc99b60d9ac7334e3a21d10ad8f1835a4e12ec3ec0464765ed1b3"
+dependencies = [
+ "once_cell",
+]
+
+[[package]]
+name = "is-wsl"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "173609498df190136aa7dea1a91db051746d339e18476eed5ca40521f02d7aa5"
+dependencies = [
+ "is-docker",
+ "once_cell",
+]
+
+[[package]]
 name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1628,6 +1653,16 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "open"
+version = "5.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d8c8b8e725ad26404d6896eb2f064294a0a7b4f1d9120210d85544684c4ca95"
+dependencies = [
+ "is-wsl",
+ "libc",
+]
 
 [[package]]
 name = "openssl"
