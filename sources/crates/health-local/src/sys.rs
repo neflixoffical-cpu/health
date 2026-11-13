@@ -44,6 +44,7 @@ impl SystemInfo {
 
 const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
 
+#[cfg(windows)]
 fn vendor_of(name: &str) -> GpuVendor {
     let n = name.to_lowercase();
     if n.contains("nvidia") || n.contains("geforce") || n.contains("quadro") || n.contains("rtx") {
@@ -107,6 +108,8 @@ pub fn detect() -> SystemInfo {
             }
         }
     }
+    #[cfg(target_os = "linux")]
+    linux_detect(&mut s);
     // nvidia-smi gives exact VRAM for NVIDIA cards
     if let Some(out) = nvidia_smi() {
         for line in out.lines() {
@@ -114,13 +117,67 @@ pub fn detect() -> SystemInfo {
             let (Some(name), Some(mem)) = (parts.next(), parts.next()) else { continue };
             let Ok(mib) = mem.parse::<f64>() else { continue };
             let vram = mib / 1024.0;
-            match s.gpus.iter_mut().find(|g| g.vendor == GpuVendor::Nvidia && (g.name.contains(name) || name.contains(&g.name))) {
-                Some(g) => g.vram_gb = Some(vram),
+            let found = s.gpus.iter_mut().find(|g| {
+                g.vendor == GpuVendor::Nvidia && (g.name.contains(name) || name.contains(&g.name) || (g.name.starts_with("NVIDIA GPU (") && g.vram_gb.is_none()))
+            });
+            match found {
+                Some(g) => {
+                    g.name = name.to_string();
+                    g.vram_gb = Some(vram)
+                }
                 None => s.gpus.push(GpuInfo { name: name.to_string(), vendor: GpuVendor::Nvidia, vram_gb: Some(vram) }),
             }
         }
     }
     s
+}
+
+/// RAM from /proc/meminfo, CPU from /proc/cpuinfo, GPUs from /sys/class/drm
+/// (AMD exposes VRAM in `mem_info_vram_total`; NVIDIA VRAM comes from nvidia-smi below).
+#[cfg(target_os = "linux")]
+fn linux_detect(s: &mut SystemInfo) {
+    if let Ok(mi) = std::fs::read_to_string("/proc/meminfo") {
+        let kb = |key: &str| {
+            mi.lines()
+                .find(|l| l.starts_with(key))
+                .and_then(|l| l.split_whitespace().nth(1))
+                .and_then(|v| v.parse::<f64>().ok())
+                .map(|v| v * 1024.0 / GIB)
+        };
+        s.total_ram_gb = kb("MemTotal:").unwrap_or(0.0);
+        s.available_ram_gb = kb("MemAvailable:").or_else(|| kb("MemFree:")).unwrap_or(0.0);
+    }
+    if let Ok(ci) = std::fs::read_to_string("/proc/cpuinfo") {
+        if let Some(n) = ci.lines().find(|l| l.starts_with("model name")).and_then(|l| l.split_once(':')) {
+            s.cpu_name = n.1.trim().to_string();
+        }
+    }
+    let Ok(dir) = std::fs::read_dir("/sys/class/drm") else { return };
+    let mut cards: Vec<_> = dir
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .filter(|n| n.starts_with("card") && n[4..].chars().all(|c| c.is_ascii_digit()))
+        .collect();
+    cards.sort();
+    for card in cards {
+        let dev = std::path::Path::new("/sys/class/drm").join(&card).join("device");
+        let read = |f: &str| std::fs::read_to_string(dev.join(f)).map(|v| v.trim().to_string()).unwrap_or_default();
+        let vendor = match read("vendor").as_str() {
+            "0x10de" => GpuVendor::Nvidia,
+            "0x1002" => GpuVendor::Amd,
+            "0x8086" => GpuVendor::Intel,
+            _ => continue,
+        };
+        let vram = read("mem_info_vram_total").parse::<f64>().ok().filter(|v| *v > 64.0 * 1024.0 * 1024.0).map(|v| v / GIB);
+        let base = match vendor {
+            GpuVendor::Nvidia => "NVIDIA GPU",
+            GpuVendor::Amd => "AMD Radeon GPU",
+            GpuVendor::Intel => "Intel GPU",
+            GpuVendor::Other => "GPU",
+        };
+        let name = format!("{base} ({})", read("device"));
+        s.gpus.push(GpuInfo { name, vendor, vram_gb: vram });
+    }
 }
 
 fn nvidia_smi() -> Option<String> {

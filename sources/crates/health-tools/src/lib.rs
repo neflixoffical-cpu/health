@@ -6,6 +6,8 @@
 mod fs_tools;
 mod search;
 mod shell;
+mod pty;
+mod background;
 mod util;
 mod web;
 mod todo;
@@ -23,7 +25,7 @@ pub struct BuiltinTools {
     config: SharedConfig,
     fixed: Vec<Arc<dyn Tool>>,
     todo: Arc<TodoStore>,
-    shells: Mutex<HashMap<ShellKind, Arc<dyn Tool>>>,
+    shells: Mutex<HashMap<ShellKind, (Arc<dyn Tool>, Arc<dyn Tool>)>>,
 }
 
 impl BuiltinTools {
@@ -51,9 +53,18 @@ impl BuiltinTools {
 impl ToolProvider for BuiltinTools {
     fn tools(&self) -> Vec<Arc<dyn Tool>> {
         let kind = self.config.read().shell;
-        let shell = self.shells.lock().entry(kind).or_insert_with(|| Arc::new(shell::Shell::new(kind)) as Arc<dyn Tool>).clone();
+        let (shell, bg) = self
+            .shells
+            .lock()
+            .entry(kind)
+            .or_insert_with(|| {
+                let sh = Arc::new(shell::Shell::new(kind));
+                (sh.clone() as Arc<dyn Tool>, Arc::new(background::Background { shell: sh }) as Arc<dyn Tool>)
+            })
+            .clone();
         let mut v = self.fixed.clone();
         v.insert(6, shell);
+        v.push(bg);
         v
     }
 }

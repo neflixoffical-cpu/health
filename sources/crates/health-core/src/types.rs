@@ -897,12 +897,15 @@ impl PermissionMode {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ShellKind {
-    /// `pwsh.exe` if installed, else Windows PowerShell 5.1.
-    #[default]
+    /// `pwsh.exe` if installed, else Windows PowerShell 5.1 (on Linux: `pwsh` if installed).
+    #[cfg_attr(windows, default)]
     PowerShell,
     Cmd,
     /// Git for Windows `bash.exe`.
     GitBash,
+    /// `/bin/bash` (default on Linux).
+    #[cfg_attr(not(windows), default)]
+    Bash,
 }
 
 impl ShellKind {
@@ -911,6 +914,7 @@ impl ShellKind {
             ShellKind::PowerShell => "PowerShell",
             ShellKind::Cmd => "cmd.exe",
             ShellKind::GitBash => "Git Bash",
+            ShellKind::Bash => "Bash",
         }
     }
 }

@@ -134,9 +134,17 @@ pub fn detect_system_lang() -> Lang {
     }
     #[cfg(not(windows))]
     {
-        match std::env::var("LANG") {
-            Ok(v) if v.starts_with("en") => Lang::En,
-            _ => Lang::Ru,
+        // POSIX precedence: LC_ALL > LC_MESSAGES > LANG
+        let v = ["LC_ALL", "LC_MESSAGES", "LANG"]
+            .iter()
+            .filter_map(|k| std::env::var(k).ok())
+            .find(|v| !v.is_empty())
+            .unwrap_or_default()
+            .to_lowercase();
+        if ["ru", "uk", "be", "kk"].iter().any(|p| v.starts_with(p)) {
+            Lang::Ru
+        } else {
+            Lang::En
         }
     }
 }

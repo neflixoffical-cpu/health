@@ -1,0 +1,41 @@
+# Arch Linux package for Health, built from this source tree.
+#   cd packaging/arch && makepkg -si
+pkgname=health-ai
+pkgver=1.2.0
+pkgrel=1
+pkgdesc="Full-screen AI coding agent for the terminal"
+arch=('x86_64' 'aarch64')
+url="https://github.com/neflixoffical-cpu/health"
+license=('MIT')
+depends=('gcc-libs' 'glibc' 'bash')
+makedepends=('rust' 'cargo')
+optdepends=('libnotify: desktop notifications'
+            'xdg-utils: open folders and the login page'
+            'nvidia-utils: exact VRAM detection for local models'
+            'powershell-bin: PowerShell as the agent shell (AUR)')
+options=('!lto')
+
+_src() { realpath "$startdir/../.."; }
+
+prepare() {
+  cd "$(_src)/sources"
+  export CARGO_HOME="${CARGO_HOME:-$srcdir/cargo}"
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd "$(_src)/sources"
+  export CARGO_TARGET_DIR="$srcdir/target"
+  cargo build --frozen --release -p health
+}
+
+check() {
+  cd "$(_src)/sources"
+  export CARGO_TARGET_DIR="$srcdir/target"
+  cargo test --frozen --release -p health-core -p health-tools -p health-local
+}
+
+package() {
+  install -Dm755 "$srcdir/target/release/health" "$pkgdir/usr/bin/health"
+  install -Dm644 "$(_src)/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

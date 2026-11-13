@@ -21,6 +21,8 @@ anyhow = { workspace = true }
 parking_lot = { workspace = true }
 futures-util = { workspace = true }
 base64 = { workspace = true }
+portable-pty = { workspace = true }
+strip-ansi-escapes = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true }

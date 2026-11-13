@@ -1,4 +1,6 @@
 //! API keys at rest are encrypted with Windows DPAPI (current user scope).
+//! On Linux there is no DPAPI: keys are stored as `"b64:<base64>"` in a config file
+//! created with mode 0600 (see `util::atomic_write`), like most Unix CLI tools do.
 //! On disk a secret looks like `"dpapi:<base64>"`; plain strings are accepted on load
 //! (e.g. a hand-edited config) and re-encrypted on the next save.
 

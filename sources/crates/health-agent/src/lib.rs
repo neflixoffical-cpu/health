@@ -3,6 +3,7 @@
 //! user's optional custom prompt (plus, with `/customeffort` on, the user's prompt for the active
 //! custom effort level). Sub-agents (`agent` tool) run the same loop with the user's agent prompt.
 
+mod extra;
 mod internal;
 
 use futures::future::join_all;
@@ -178,7 +179,27 @@ impl Agent {
                 if cfg.custom_reasoning_for(model) {
                     tools.push(Arc::new(internal::ReasoningTool { open: self.reasoning.clone() }));
                 }
+                tools.push(Arc::new(extra::AskTool { ev: self.ev.clone() }));
+                if cfg.workflow.enabled {
+                    tools.push(Arc::new(extra::WorkflowTool {
+                        config: self.config.clone(),
+                        resolver: self.resolver.clone(),
+                        tools: self.tools.clone(),
+                        cwd: self.cwd.clone(),
+                        allow: self.allow.clone(),
+                        ev: self.ev.clone(),
+                        max_parallel: cfg.workflow.max_parallel.clamp(1, 64),
+                        max_agents: cfg.workflow.max_agents.clamp(1, 1000),
+                    }));
+                }
             }
+        }
+        if self.sub.is_some() {
+            tools.retain(|t| t.name() != extra::WORKFLOW_TOOL && t.name() != extra::ASK_TOOL);
+        }
+        if cfg.dry {
+            // dry mode: only think and plan — read-only tools, no delegation
+            tools.retain(|t| t.risk(&Value::Object(Default::default())) == ToolRisk::ReadOnly && ![internal::AGENT_TOOL, extra::WORKFLOW_TOOL].contains(&t.name()));
         }
         tools.sort_by(|a, b| a.name().cmp(b.name()));
         tools
@@ -189,10 +210,26 @@ impl Agent {
         loop {
             let cmd = match queue.pop_front() {
                 Some(s) => AgentCommand::Submit { text: s.text, display: s.display, attachments: s.attachments },
-                None => match rx.recv().await {
-                    Some(c) => c,
-                    None => break,
-                },
+                None => {
+                    let reg = health_core::procs::registry();
+                    tokio::select! {
+                        c = rx.recv() => match c {
+                            Some(c) => c,
+                            None => break,
+                        },
+                        _ = reg.done_notify.notified() => {
+                            // a background command ended while the model was idle: tell it right away
+                            let done = reg.take_done();
+                            if done.is_empty() {
+                                continue;
+                            }
+                            let ids = done.iter().map(|d| format!("#{}", d.id)).collect::<Vec<_>>().join(", ");
+                            let display = tf!("⚙ Фоновая команда {} завершилась", "⚙ Background command {} finished", ids);
+                            let _ = self.ev.send(AgentEvent::AutoSubmit { display: display.clone() });
+                            AgentCommand::Submit { text: health_core::procs::describe_done(&done), display: Some(display), attachments: Vec::new() }
+                        }
+                    }
+                }
             };
             match cmd {
                 AgentCommand::Submit { text, display, attachments } => {
@@ -290,6 +327,11 @@ impl Agent {
         }
         content.push(ContentBlock::text(s.text));
         content.extend(s.attachments);
+        if self.config.read().dry {
+            content.push(ContentBlock::text(
+                "[Dry mode is on: do not change anything — no edits, no commands. Only think the task through, read what you need and write a concrete plan.]",
+            ));
+        }
         self.conv.messages.push(Message {
             role: Role::User,
             content,
@@ -314,6 +356,17 @@ impl Agent {
                 return StopReason::Cancelled;
             }
             let cfg = self.config.read().clone();
+            if self.sub.is_none() {
+                let done = health_core::procs::registry().take_done();
+                if !done.is_empty() {
+                    let text = health_core::procs::describe_done(&done);
+                    if let Some(last) = self.conv.messages.last_mut().filter(|m| m.role == Role::User) {
+                        last.content.push(ContentBlock::text(text));
+                    }
+                    let ids = done.iter().map(|d| format!("#{}", d.id)).collect::<Vec<_>>().join(", ");
+                    notice(&self.ev, NoticeLevel::Info, tf!("Фоновая команда {} завершилась — модель знает", "Background command {} finished — the model was told", ids));
+                }
+            }
             let Some(model) = self.sub.as_ref().and_then(|s| s.model.clone()).or_else(|| cfg.current_model.clone()) else {
                 let _ = self.ev.send(AgentEvent::Error {
                     kind: ChatErrorKind::NoKey,
@@ -395,6 +448,19 @@ impl Agent {
                             self.conv.messages.push(Message { role: Role::User, content: results, meta: MessageMeta { timestamp: chrono::Utc::now().timestamp(), ..Default::default() } });
                             if cancel.is_cancelled() {
                                 return StopReason::Cancelled;
+                            }
+                            if self.sub.is_none() && cfg.boss.enabled {
+                                let mut used = Usage::default();
+                                let verdict = extra::boss_review(&self.resolver, &cfg, &model, &self.conv.messages, cancel, &mut used).await;
+                                if used.total() > 0 {
+                                    let _ = self.ev.send(AgentEvent::SubUsage { model: cfg.boss.model.clone().unwrap_or_else(|| model.clone()), usage: used });
+                                }
+                                if let Some(text) = verdict {
+                                    let _ = self.ev.send(AgentEvent::Boss { text: text.clone() });
+                                    if let Some(last) = self.conv.messages.last_mut() {
+                                        last.content.push(ContentBlock::text(extra::boss_message(&text)));
+                                    }
+                                }
                             }
                             truncations = 0;
                         }
@@ -523,6 +589,11 @@ impl Agent {
         }
         let ctx = ToolCtx { cwd: self.cwd.read().clone(), cancel: cancel.child_token(), shell: cfg.shell, progress: None, call_id: id.clone() };
         let risk = tool.risk(input);
+        if self.config.read().dry && risk != ToolRisk::ReadOnly {
+            let msg = "Dry mode is on (/dry): you may only think and plan, not change anything. Describe this step in your plan instead.";
+            finish(true, ToolDisplay::Summary { text: t!("Запрещено в режиме /dry", "Not allowed in /dry mode").into() }, msg.into());
+            return error_result(id, msg);
+        }
         let key = allow_key(name, input);
         let mode = self.config.read().permission_mode;
         let allowed = auto_allowed(risk, mode) || self.allow.lock().contains(&key);

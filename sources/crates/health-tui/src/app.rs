@@ -6,7 +6,7 @@ use crate::transcript::{from_messages, Item, ToolItem, ToolState, Transcript, We
 use base64::Engine;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use health_core::{
-    t, tf, AgentCommand, AgentEvent, ContentBlock, Effort, Lang, NoticeLevel, PermissionDecision, PermissionMode, PermissionRequest, StopReason, TodoItem,
+    t, tf, util, AgentCommand, AgentEvent, ContentBlock, Effort, Lang, NoticeLevel, PermissionDecision, PermissionMode, PermissionRequest, StopReason, TodoItem,
     TodoStatus, ToolDisplay,
 };
 use health_theme::{hit, FieldAction, Mascot, Mood, TextField, Toasts};
@@ -20,6 +20,40 @@ pub struct Perm {
     pub req: PermissionRequest,
     pub sel: usize,
     pub feedback: Option<TextField>,
+}
+
+/// A command is waiting for input (password or, in beta mode, any prompt).
+pub struct InputPrompt {
+    pub proc_id: u32,
+    pub text: String,
+    pub secret: bool,
+    pub title: String,
+    pub field: TextField,
+}
+
+/// The `ask` tool's questions, answered one by one.
+pub struct AskState {
+    pub req: health_core::AskRequest,
+    pub idx: usize,
+    pub answers: Vec<String>,
+    pub sel: usize,
+    pub picked: Vec<bool>,
+    /// Own answer field (the last row of the options).
+    pub custom: TextField,
+}
+
+impl AskState {
+    pub fn new(req: health_core::AskRequest) -> Self {
+        let n = req.questions.first().map(|q| q.options.len()).unwrap_or(0);
+        AskState { req, idx: 0, answers: Vec::new(), sel: 0, picked: vec![false; n], custom: TextField::new().placeholder(t!("Свой ответ…", "Your own answer…")) }
+    }
+    pub fn question(&self) -> &health_core::AskQuestion {
+        &self.req.questions[self.idx]
+    }
+    /// Row index of the free-text field.
+    pub fn custom_row(&self) -> usize {
+        self.question().options.len()
+    }
 }
 
 pub struct OpenPanel {
@@ -72,6 +106,12 @@ pub struct App {
     pub turn_tokens: u64,
     pub current_tool: Option<String>,
     pub perm: Option<Perm>,
+    /// Permission requests waiting behind the shown one (parallel agents).
+    perm_queue: VecDeque<health_core::PermissionRequest>,
+    pub iprompt: Option<InputPrompt>,
+    pub ask: Option<AskState>,
+    /// The `/budget` limit was reached in this session (the model was soft-stopped).
+    budget_hit: bool,
     pub panel: Option<OpenPanel>,
     pub splash: Option<Instant>,
     pub expanded: bool,
@@ -123,6 +163,10 @@ impl App {
             turn_tokens: 0,
             current_tool: None,
             perm: None,
+            perm_queue: VecDeque::new(),
+            iprompt: None,
+            ask: None,
+            budget_hit: false,
             panel: None,
             splash: if splash && cfg.ui.splash && cfg.ui.animations { Some(Instant::now()) } else { None },
             expanded: false,
@@ -394,7 +438,7 @@ impl App {
         }
         let Some(text) = self.selected_text() else { return };
         let n = text.chars().count();
-        match arboard::Clipboard::new().and_then(|mut c| c.set_text(text)) {
+        match crate::clip::set(text) {
             Ok(()) => self.toasts.push(NoticeLevel::Success, tf!("Скопировано: {} симв.", "Copied: {} chars", n)),
             Err(e) => self.toasts.push(NoticeLevel::Error, format!("{e}")),
         }
@@ -435,7 +479,7 @@ impl App {
             let ctx = PanelCtx { services: &self.services, now, animations: health_theme::fx::animations() };
             let a = if ctrl && k.code == KeyCode::Char('v') {
                 // terminals that pass Ctrl+V through: paste from the clipboard ourselves
-                match arboard::Clipboard::new().and_then(|mut cb| cb.get_text()) {
+                match crate::clip::get() {
                     Ok(text) => p.panel.on_paste(&text, &ctx),
                     Err(_) => Vec::new(),
                 }
@@ -448,12 +492,29 @@ impl App {
             self.apply_actions(a);
             return;
         }
+        if self.iprompt.is_some() {
+            self.on_iprompt_key(k);
+            return;
+        }
+        if self.ask.is_some() {
+            self.on_ask_key(k);
+            return;
+        }
         if self.perm.is_some() {
             self.on_perm_key(k);
             return;
         }
         // global shortcuts
         match k.code {
+            KeyCode::Char('i') | KeyCode::Char('ш') if ctrl => {
+                self.open_panel(PanelKind::Workflow);
+                return;
+            }
+            // most terminals send Ctrl+I as Tab: with an empty input Tab opens the workflow view
+            KeyCode::Tab if self.input.is_empty() && self.palette.is_empty() && !health_core::workflow::workflows().list().is_empty() => {
+                self.open_panel(PanelKind::Workflow);
+                return;
+            }
             KeyCode::Char('c') if ctrl => {
                 if self.busy {
                     let _ = self.agent.send(AgentCommand::Cancel);
@@ -491,8 +552,8 @@ impl App {
                 return;
             }
             KeyCode::Char('v') if ctrl => {
-                if let Ok(mut cb) = arboard::Clipboard::new() {
-                    if let Ok(text) = cb.get_text() {
+                {
+                    if let Ok(text) = crate::clip::get() {
                         self.input.insert_str(&text);
                         self.update_palette();
                     }
@@ -711,6 +772,150 @@ impl App {
             }
             let _ = p.req.respond.send(d);
         }
+        if let Some(next) = self.perm_queue.pop_front() {
+            if let Some((i, t)) = self.transcript.tool_mut(&next.call_id) {
+                t.state = ToolState::Waiting;
+                self.transcript.touch(i);
+            }
+            self.perm = Some(Perm { req: next, sel: 0, feedback: None });
+        }
+    }
+
+    // ───────────────────────────── command input prompt / ask ─────────────────────────────
+
+    fn on_iprompt_key(&mut self, k: KeyEvent) {
+        let Some(ip) = self.iprompt.as_mut() else { return };
+        let proc = health_core::procs::registry().get(ip.proc_id);
+        if k.code == KeyCode::Char('c') && k.modifiers.contains(KeyModifiers::CONTROL) {
+            if let Some(p) = &proc {
+                let _ = p.send(&[3]);
+            }
+            self.iprompt = None;
+            return;
+        }
+        match ip.field.handle_key(&k) {
+            FieldAction::Submit => {
+                let v = ip.field.value();
+                if let Some(p) = proc {
+                    if let Err(e) = p.send_line(&v) {
+                        self.toasts.push(NoticeLevel::Error, e.to_string());
+                    }
+                }
+                self.iprompt = None;
+            }
+            FieldAction::Cancel => {
+                if let Some(p) = proc {
+                    p.dismiss_prompt();
+                }
+                self.iprompt = None;
+                self.toasts.push(NoticeLevel::Info, t!("Ответить можно позже: /process", "You can answer later: /process"));
+            }
+            _ => {}
+        }
+    }
+
+    fn on_ask_key(&mut self, k: KeyEvent) {
+        let Some(a) = self.ask.as_mut() else { return };
+        let rows = a.custom_row() + 1;
+        let on_custom = a.sel == a.custom_row();
+        let multi = a.question().multi;
+        match k.code {
+            KeyCode::Esc => {
+                if let Some(a) = self.ask.take() {
+                    let _ = a.req.respond.send(None);
+                }
+                return;
+            }
+            KeyCode::Up => {
+                a.sel = (a.sel + rows - 1) % rows;
+                return;
+            }
+            KeyCode::Down | KeyCode::Tab => {
+                a.sel = (a.sel + 1) % rows;
+                return;
+            }
+            KeyCode::Char(' ') if multi && !on_custom => {
+                let i = a.sel;
+                a.picked[i] = !a.picked[i];
+                return;
+            }
+            KeyCode::Char(c) if !on_custom && c.is_ascii_digit() && c != '0' => {
+                let i = c as usize - '1' as usize;
+                if i < a.custom_row() {
+                    a.sel = i;
+                    if multi {
+                        a.picked[i] = !a.picked[i];
+                        return;
+                    }
+                } else {
+                    return;
+                }
+            }
+            _ if on_custom => {
+                if let FieldAction::Submit = a.custom.handle_key(&k) {
+                } else {
+                    return;
+                }
+            }
+            KeyCode::Enter => {}
+            _ => return,
+        }
+        // an answer for the current question
+        let q = a.question().clone();
+        let answer = if a.sel == a.custom_row() {
+            let own = a.custom.value();
+            let mut chosen: Vec<String> = q.options.iter().zip(&a.picked).filter(|(_, p)| **p).map(|(o, _)| o.clone()).collect();
+            if !own.trim().is_empty() {
+                chosen.push(own);
+            }
+            chosen.join("; ")
+        } else if multi {
+            let chosen: Vec<String> = q.options.iter().zip(&a.picked).filter(|(_, p)| **p).map(|(o, _)| o.clone()).collect();
+            if chosen.is_empty() {
+                q.options[a.sel].clone()
+            } else {
+                chosen.join("; ")
+            }
+        } else {
+            q.options[a.sel].clone()
+        };
+        a.answers.push(answer);
+        a.idx += 1;
+        if a.idx >= a.req.questions.len() {
+            if let Some(a) = self.ask.take() {
+                let _ = a.req.respond.send(Some(a.answers));
+            }
+        } else {
+            let n = a.question().options.len();
+            a.sel = 0;
+            a.picked = vec![false; n];
+            a.custom.clear();
+        }
+    }
+
+    /// Show a command's password / input prompt (called every frame).
+    fn poll_prompts(&mut self) {
+        let reg = health_core::procs::registry();
+        if let Some(ip) = &self.iprompt {
+            // the command ended or moved on
+            let gone = reg.get(ip.proc_id).map(|p| !p.running() || p.partial().trim_end() != ip.text).unwrap_or(true);
+            if gone {
+                self.iprompt = None;
+            }
+            return;
+        }
+        if self.panel.as_ref().map(|p| p.panel.title().contains('#')).unwrap_or(false) {
+            return; // the user is in a process console already
+        }
+        let auto = self.services.config().ui.auto_interactive;
+        if let Some(p) = reg.pending_prompt(auto) {
+            let field = TextField::new().secret(p.secret).placeholder(if p.secret { t!("Пароль (не отображается) · Enter — отправить · Esc — позже", "Password (hidden) · Enter to send · Esc for later") } else { t!("Ответ · Enter — отправить · Esc — позже (/process)", "Answer · Enter to send · Esc for later (/process)") });
+            if self.services.config().ui.notify_done && self.in_background() {
+                crate::notify::show("Health", &tf!("Команда ждёт ввода: {}", "A command is waiting for input: {}", p.text));
+            }
+            self.mascot.set_mood(Mood::Listening);
+            self.iprompt = Some(InputPrompt { proc_id: p.proc_id, text: p.text, secret: p.secret, title: p.title, field });
+        }
     }
 
     // ───────────────────────────── submit & commands ─────────────────────────────
@@ -800,6 +1005,12 @@ impl App {
     }
 
     fn send(&mut self, text: String, display: Option<String>, attachments: Vec<ContentBlock>) {
+        if let Some(b) = self.services.config().budget_tokens {
+            if self.services.session.read().total.total() >= b {
+                self.toasts.push(NoticeLevel::Warning, t!("Бюджет сессии исчерпан — /budget <больше> или /budget off", "Session budget used up — /budget <more> or /budget off"));
+                return;
+            }
+        }
         let shown = display.clone().unwrap_or_else(|| text.clone());
         self.transcript.push(Item::User { text: shown });
         self.scroll = 0;
@@ -942,15 +1153,119 @@ impl App {
             "copy" => {
                 let last = self.transcript.items.iter().rev().find_map(|i| if let Item::Assistant { text, .. } = i { Some(text.clone()) } else { None });
                 match last {
-                    Some(text) => match arboard::Clipboard::new().and_then(|mut c| c.set_text(text)) {
+                    Some(text) => match crate::clip::set(text) {
                         Ok(()) => self.toasts.push(NoticeLevel::Success, t!("Ответ скопирован", "Answer copied")),
                         Err(e) => self.toasts.push(NoticeLevel::Error, format!("{e}")),
                     },
                     None => self.toasts.push(NoticeLevel::Info, t!("Пока нечего копировать", "Nothing to copy yet")),
                 }
             }
+            "process" | "background" => self.open_panel(PanelKind::Process),
+            "workflow" => self.open_panel(PanelKind::Workflow),
+            "flow" => self.open_panel(PanelKind::Flow),
+            "profile" => {
+                if args.is_empty() {
+                    self.open_panel(PanelKind::Profile);
+                } else {
+                    match self.services.config().profile(args).cloned() {
+                        Some(p) => {
+                            let a = health_panels_profile(&self.services, &p);
+                            self.apply_actions(a);
+                        }
+                        None => self.toasts.push(NoticeLevel::Error, tf!("Профиля «{}» нет — создайте его в /profile", "No profile “{}” — create it in /profile", args)),
+                    }
+                }
+            }
+            "dry" => {
+                let on = match args.to_lowercase().as_str() {
+                    "on" | "вкл" => true,
+                    "off" | "выкл" => false,
+                    _ => !self.services.config().dry,
+                };
+                self.services.config.write().dry = on;
+                if on {
+                    self.toasts.push(NoticeLevel::Warning, t!("Режим /dry: модель только думает и строит план, ничего не меняет", "/dry mode: the model only thinks and plans, changes nothing"));
+                } else {
+                    self.toasts.push(NoticeLevel::Success, t!("Режим /dry выключен", "/dry mode is off"));
+                }
+            }
+            "boss" => {
+                let a = args.trim();
+                if let Some(q) = a.strip_prefix("model").map(str::trim) {
+                    if q.is_empty() || q == "off" || q == "default" {
+                        self.services.update_config(|c| c.boss.model = None);
+                        self.toasts.push(NoticeLevel::Success, t!("Босс использует текущую модель", "The boss uses the current model"));
+                    } else {
+                        match self.services.providers.resolve_query(q).first() {
+                            Some(m) => {
+                                let r = m.model_ref();
+                                self.services.update_config(|c| c.boss.model = Some(r.clone()));
+                                self.toasts.push(NoticeLevel::Success, tf!("Модель босса: {}", "Boss model: {}", r));
+                            }
+                            None => self.toasts.push(NoticeLevel::Error, tf!("Модель «{}» не найдена", "Model “{}” not found", q)),
+                        }
+                    }
+                    return;
+                }
+                let on = match a.to_lowercase().as_str() {
+                    "on" | "вкл" => true,
+                    "off" | "выкл" => false,
+                    _ => !self.services.config().boss.enabled,
+                };
+                self.services.update_config(|c| c.boss.enabled = on);
+                if on {
+                    let m = self.services.config().boss.model.map(|m| m.to_string()).unwrap_or_else(|| t!("текущая модель", "the current model").into());
+                    self.toasts.push(NoticeLevel::Success, tf!("👔 Босс следит за агентом ({}). Модель: /boss model <id>", "👔 The boss watches the agent ({}). Model: /boss model <id>", m));
+                } else {
+                    self.toasts.push(NoticeLevel::Info, t!("Босс выключен", "The boss is off"));
+                }
+            }
+            "budget" => {
+                let a = args.trim().to_lowercase();
+                if a.is_empty() {
+                    let used = self.services.session.read().total.total();
+                    match self.services.config().budget_tokens {
+                        Some(b) => self.toasts.push(NoticeLevel::Info, tf!("Бюджет: {} из {} токенов", "Budget: {} of {} tokens", util::human_tokens(used), util::human_tokens(b))),
+                        None => self.toasts.push(NoticeLevel::Info, t!("Бюджета нет. Задать: /budget 500k", "No budget. Set one: /budget 500k")),
+                    }
+                } else if matches!(a.as_str(), "off" | "none" | "выкл" | "0") {
+                    self.services.update_config(|c| c.budget_tokens = None);
+                    self.budget_hit = false;
+                    self.toasts.push(NoticeLevel::Success, t!("Бюджет снят", "Budget removed"));
+                } else {
+                    match parse_tokens(&a) {
+                        Some(n) => {
+                            self.services.update_config(|c| c.budget_tokens = Some(n));
+                            self.budget_hit = self.services.session.read().total.total() >= n;
+                            self.toasts.push(NoticeLevel::Success, tf!("Бюджет сессии: {} токенов", "Session budget: {} tokens", util::human_tokens(n)));
+                        }
+                        None => self.toasts.push(NoticeLevel::Error, t!("Формат: /budget 200k, /budget 1.5m, /budget off", "Usage: /budget 200k, /budget 1.5m, /budget off")),
+                    }
+                }
+            }
             "exit" => self.quit = true,
             _ => {}
+        }
+    }
+
+    /// `/budget`: soft-stop the model once the session spent the budget.
+    fn check_budget(&mut self) {
+        let Some(b) = self.services.config().budget_tokens else { return };
+        let used = self.services.session.read().total.total();
+        if used >= b && !self.budget_hit {
+            self.budget_hit = true;
+            if self.busy {
+                let _ = self.agent.send(AgentCommand::SoftStop);
+            }
+            self.transcript.push(Item::Notice {
+                level: NoticeLevel::Warning,
+                text: tf!(
+                    "Бюджет сессии исчерпан: {} из {} токенов — плавно останавливаю модель. Увеличить: /budget <число>, снять: /budget off",
+                    "Session budget used up: {} of {} tokens — soft-stopping the model. Raise it: /budget <n>, remove: /budget off",
+                    util::human_tokens(used),
+                    util::human_tokens(b)
+                ),
+            });
         }
     }
 
@@ -1118,7 +1433,33 @@ impl App {
                 }
                 self.mascot.set_mood(Mood::Listening);
                 self.scroll = 0;
-                self.perm = Some(Perm { req, sel: 0, feedback: None });
+                if self.perm.is_some() {
+                    self.perm_queue.push_back(req);
+                } else {
+                    self.perm = Some(Perm { req, sel: 0, feedback: None });
+                }
+            }
+            AgentEvent::Ask(req) => {
+                if let Some((i, t)) = self.transcript.tool_mut(&req.call_id) {
+                    t.state = ToolState::Waiting;
+                    self.transcript.touch(i);
+                }
+                if self.services.config().ui.notify_done && self.in_background() {
+                    crate::notify::show("Health", t!("Модель задаёт вопросы", "The model has questions for you"));
+                }
+                self.mascot.set_mood(Mood::Listening);
+                self.scroll = 0;
+                if !req.questions.is_empty() {
+                    self.ask = Some(AskState::new(req));
+                }
+            }
+            AgentEvent::Boss { text } => {
+                self.transcript.push(Item::Notice { level: NoticeLevel::Warning, text: tf!("👔 Босс остановил агента:\n{}", "👔 The boss stopped the agent:\n{}", text) });
+                self.mascot.set_mood(Mood::Error);
+            }
+            AgentEvent::AutoSubmit { display } => {
+                self.transcript.push(Item::User { text: display });
+                self.scroll = 0;
             }
             AgentEvent::ToolRunning { call_id } => {
                 if let Some((_, t)) = self.transcript.tool_mut(&call_id) {
@@ -1158,10 +1499,13 @@ impl App {
                 self.end_thinking();
             }
             AgentEvent::SubUsage { model, usage } => {
-                let mut s = self.services.session.write();
-                s.total.add(&usage);
-                let e = s.per_model.entry(model.key()).or_insert_with(|| (model.clone(), Default::default()));
-                e.1.add(&usage);
+                {
+                    let mut s = self.services.session.write();
+                    s.total.add(&usage);
+                    let e = s.per_model.entry(model.key()).or_insert_with(|| (model.clone(), Default::default()));
+                    e.1.add(&usage);
+                }
+                self.check_budget();
             }
             AgentEvent::SoftStopping => self.mascot.set_mood(Mood::Listening),
             AgentEvent::Usage { last, total, context_tokens } => {
@@ -1173,6 +1517,8 @@ impl App {
                     let e = s.per_model.entry(m.key()).or_insert_with(|| (m.clone(), Default::default()));
                     e.1.add(&last);
                 }
+                drop(s);
+                self.check_budget();
             }
             AgentEvent::TurnFinished { stop, elapsed_ms } => {
                 self.finish_streaming();
@@ -1214,6 +1560,8 @@ impl App {
                 if self.perm.is_some() {
                     self.perm = None;
                 }
+                self.perm_queue.clear();
+                self.ask = None;
                 if self.todos.iter().all(|t| t.status == TodoStatus::Completed) {
                     self.todos.clear();
                 }
@@ -1275,6 +1623,7 @@ impl App {
         }
         self.toasts.tick(now);
         self.mascot.tick(now);
+        self.poll_prompts();
         if let Some(p) = self.panel.as_mut() {
             let ctx = PanelCtx { services: &self.services, now, animations: health_theme::fx::animations() };
             let a = p.panel.tick(&ctx);
@@ -1299,6 +1648,33 @@ impl PathCleaner {
             _ => p,
         }
     }
+}
+
+/// `200k`, `1.5m`, `50000` → tokens.
+pub(crate) fn parse_tokens(s: &str) -> Option<u64> {
+    let s = s.trim().replace(['_', ' '], "").to_lowercase();
+    let (num, mul) = if let Some(n) = s.strip_suffix('k').or_else(|| s.strip_suffix('к')) {
+        (n.to_string(), 1_000.0)
+    } else if let Some(n) = s.strip_suffix('m').or_else(|| s.strip_suffix('м')) {
+        (n.to_string(), 1_000_000.0)
+    } else {
+        (s.clone(), 1.0)
+    };
+    let v: f64 = num.replace(',', ".").parse().ok()?;
+    (v > 0.0).then(|| (v * mul).round() as u64)
+}
+
+fn health_panels_profile(s: &Services, p: &health_core::Profile) -> Vec<Action> {
+    let mut out = Vec::new();
+    if let Some(e) = p.effort {
+        s.update_config(|c| c.effort = e);
+    }
+    match &p.model {
+        Some(m) => out.push(Action::SetModel(m.clone())),
+        None => out.push(Action::warning(t!("В профиле нет модели", "The profile has no model"))),
+    }
+    out.push(Action::success(tf!("Профиль «{}»", "Profile “{}”", p.name)));
+    out
 }
 
 fn history_file() -> std::path::PathBuf {

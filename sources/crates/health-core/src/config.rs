@@ -43,6 +43,65 @@ pub struct Config {
     pub agents: AgentsConfig,
     /// Signed in with a Health Cloud account (`/login`).
     pub account: Option<HealthAccount>,
+    /// `/boss`: a supervisor agent that reviews every step of the main agent (off by default).
+    pub boss: BossConfig,
+    /// `/budget`: token budget for the app session; reaching it soft-stops the model. `None` = no limit.
+    pub budget_tokens: Option<u64>,
+    /// `/dry`: the agent may only think and plan (read-only tools). Never saved — per app session.
+    #[serde(skip)]
+    pub dry: bool,
+    /// `/profile`: named model presets for quick switching.
+    pub profiles: Vec<Profile>,
+    /// `/flow`: the `workflow` tool (many parallel sub-agents).
+    pub workflow: WorkflowConfig,
+}
+
+// ───────────────────────────── /boss, /profile, /flow ─────────────────────────────
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct BossConfig {
+    pub enabled: bool,
+    /// Model of the supervisor; `None` = the current model.
+    pub model: Option<ModelRef>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Profile {
+    pub name: String,
+    pub model: Option<ModelRef>,
+    /// Effort to switch to with the profile (`None` = keep the current one).
+    pub effort: Option<Effort>,
+}
+
+impl Default for Profile {
+    fn default() -> Self {
+        Profile { name: String::new(), model: None, effort: None }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WorkflowConfig {
+    /// Offer the `workflow` tool to the model.
+    pub enabled: bool,
+    /// Agents running at the same time.
+    pub max_parallel: usize,
+    /// Agents in one workflow.
+    pub max_agents: usize,
+}
+
+impl Default for WorkflowConfig {
+    fn default() -> Self {
+        WorkflowConfig { enabled: true, max_parallel: 8, max_agents: 200 }
+    }
+}
+
+impl Config {
+    pub fn profile(&self, name: &str) -> Option<&Profile> {
+        self.profiles.iter().find(|p| p.name.eq_ignore_ascii_case(name.trim()))
+    }
 }
 
 impl Default for Config {
@@ -62,11 +121,16 @@ impl Default for Config {
             skills: SkillsConfig::default(),
             local: LocalConfig::default(),
             ui: UiConfig::default(),
-            shell: ShellKind::PowerShell,
+            shell: ShellKind::default(),
             custom_system_prompt: None,
             custom_effort: CustomEffortConfig::default(),
             agents: AgentsConfig::default(),
             account: None,
+            boss: BossConfig::default(),
+            budget_tokens: None,
+            dry: false,
+            profiles: Vec::new(),
+            workflow: WorkflowConfig::default(),
         }
     }
 }
@@ -487,11 +551,14 @@ pub struct UiConfig {
     pub notify_done: bool,
     /// Selecting text in the chat with the mouse copies it on release.
     pub copy_on_select: bool,
+    /// Beta: when a command waits for input, show its prompt and an input field automatically
+    /// (password prompts are always shown).
+    pub auto_interactive: bool,
 }
 
 impl Default for UiConfig {
     fn default() -> Self {
-        UiConfig { animations: true, splash: true, show_thinking: true, mouse: true, fps: 30, compact_tools: true, notify_done: true, copy_on_select: true }
+        UiConfig { animations: true, splash: true, show_thinking: true, mouse: true, fps: 30, compact_tools: true, notify_done: true, copy_on_select: true, auto_interactive: false }
     }
 }
 

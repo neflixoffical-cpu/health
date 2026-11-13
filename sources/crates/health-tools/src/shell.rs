@@ -7,11 +7,7 @@ use base64::Engine;
 use health_core::{t, ShellKind, Tool, ToolCtx, ToolDisplay, ToolOutput, ToolRisk, ToolSpec};
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use std::process::Stdio;
 use std::time::Duration;
-use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
-
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const MAX_CAPTURE: usize = 30_000;
 
 /// A resolved shell executable.
@@ -29,8 +25,26 @@ fn which(exe: &str) -> Option<PathBuf> {
 }
 
 /// Locate the executable for a shell kind.
+#[cfg(not(windows))]
 pub fn find_shell(kind: ShellKind) -> ShellProgram {
     match kind {
+        ShellKind::PowerShell => match which("pwsh") {
+            Some(p) => ShellProgram { kind, exe: p, name: "PowerShell 7".into() },
+            None => find_shell(ShellKind::Bash),
+        },
+        _ => {
+            let exe = which("bash").unwrap_or_else(|| PathBuf::from("/bin/sh"));
+            let name = if exe.ends_with("bash") { "Bash" } else { "sh" };
+            ShellProgram { kind: ShellKind::Bash, exe, name: name.into() }
+        }
+    }
+}
+
+/// Locate the executable for a shell kind.
+#[cfg(windows)]
+pub fn find_shell(kind: ShellKind) -> ShellProgram {
+    match kind {
+        ShellKind::Bash => find_shell(ShellKind::GitBash),
         ShellKind::PowerShell => match which("pwsh.exe") {
             Some(p) => ShellProgram { kind, exe: p, name: "PowerShell 7".into() },
             None => ShellProgram { kind, exe: PathBuf::from("powershell.exe"), name: "Windows PowerShell 5.1".into() },
@@ -60,73 +74,27 @@ impl Shell {
         Shell { prog: find_shell(kind) }
     }
 
-    fn command(&self, cmd: &str, cwd: &std::path::Path) -> std::process::Command {
-        let mut c = std::process::Command::new(&self.prog.exe);
-        match self.prog.kind {
+    /// Program + arguments that run `cmd` in this shell.
+    pub(crate) fn spec(&self, cmd: &str) -> crate::pty::Spec {
+        let args: Vec<String> = match self.prog.kind {
             ShellKind::PowerShell => {
                 let script = format!(
                     "$ProgressPreference='SilentlyContinue';[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;$OutputEncoding=[System.Text.Encoding]::UTF8;{cmd}"
                 );
                 let utf16: Vec<u8> = script.encode_utf16().flat_map(|u| u.to_le_bytes()).collect();
                 let enc = base64::engine::general_purpose::STANDARD.encode(utf16);
-                c.args(["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", &enc]);
+                // no -NonInteractive: Read-Host and similar prompts are answered through the terminal
+                vec!["-NoLogo".into(), "-NoProfile".into(), "-ExecutionPolicy".into(), "Bypass".into(), "-EncodedCommand".into(), enc]
             }
-            ShellKind::Cmd => {
-                #[cfg(windows)]
-                {
-                    use std::os::windows::process::CommandExt;
-                    c.raw_arg(format!("/d /s /c \"chcp 65001>nul & {cmd}\""));
-                }
-                #[cfg(not(windows))]
-                {
-                    c.args(["/c", cmd]);
-                }
-            }
-            ShellKind::GitBash => {
-                c.args(["-lc", cmd]);
-            }
-        }
-        c.current_dir(cwd).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).env("NO_COLOR", "1");
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            c.creation_flags(CREATE_NO_WINDOW);
-        }
-        c
+            ShellKind::Cmd => vec!["/d".into(), "/s".into(), "/c".into(), format!("chcp 65001>nul & {cmd}")],
+            ShellKind::Bash => vec!["-c".into(), cmd.to_string()],
+            ShellKind::GitBash => vec!["-lc".into(), cmd.to_string()],
+        };
+        crate::pty::Spec { exe: self.prog.exe.clone(), args }
     }
-}
 
-fn kill_tree(pid: u32) {
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        let _ = std::process::Command::new("taskkill")
-            .args(["/T", "/F", "/PID", &pid.to_string()])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .creation_flags(CREATE_NO_WINDOW)
-            .status();
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = pid;
-    }
-}
-
-async fn pump<R: AsyncRead + Unpin>(r: R, tx: tokio::sync::mpsc::UnboundedSender<String>) {
-    let mut reader = BufReader::new(r);
-    let mut buf = Vec::new();
-    loop {
-        buf.clear();
-        match reader.read_until(b'\n', &mut buf).await {
-            Ok(0) | Err(_) => break,
-            Ok(_) => {
-                let line = String::from_utf8_lossy(&buf).trim_end_matches(['\n', '\r']).to_string();
-                if tx.send(line).is_err() {
-                    break;
-                }
-            }
-        }
+    pub(crate) fn program(&self) -> &ShellProgram {
+        &self.prog
     }
 }
 
@@ -139,7 +107,8 @@ impl Tool for Shell {
         ToolSpec {
             name: "shell".into(),
             description: format!(
-                "Run a command on Windows with {} and return its output and exit code. Each call starts in the working directory (state is not kept between calls). Default timeout 120 s, max 600 s.",
+                "Run a command on {} with {} and return its output and exit code. Each call starts in the working directory (state is not kept between calls). The command runs in a terminal: if it asks for a password (sudo) or other input, the user is asked to type it, so do not try to bypass such prompts. Default timeout 120 s, max 600 s. For servers, watchers and long builds use background_command instead.",
+                if cfg!(windows) { "Windows" } else { "Linux" },
                 self.prog.name
             ),
             input_schema: schema(
@@ -158,7 +127,7 @@ impl Tool for Shell {
         let label = match self.prog.kind {
             ShellKind::PowerShell => "PowerShell",
             ShellKind::Cmd => "cmd",
-            ShellKind::GitBash => "bash",
+            ShellKind::GitBash | ShellKind::Bash => "bash",
         };
         let cmd = opt_str(input, "command").unwrap_or("").lines().next().unwrap_or("").to_string();
         format!("{label} · {}", health_core::util::truncate_chars(&cmd, 70))
@@ -167,7 +136,7 @@ impl Tool for Shell {
         let lang = match self.prog.kind {
             ShellKind::PowerShell => "powershell",
             ShellKind::Cmd => "bat",
-            ShellKind::GitBash => "bash",
+            ShellKind::GitBash | ShellKind::Bash => "bash",
         };
         Some(ToolDisplay::Code { language: Some(lang.into()), content: opt_str(input, "command")?.to_string() })
     }
@@ -181,67 +150,59 @@ impl Tool for Shell {
         if !ctx.cwd.is_dir() {
             return ToolOutput::error(format!("Working directory {} does not exist.", ctx.cwd.display()));
         }
-        let mut child = match tokio::process::Command::from(self.command(&cmd, &ctx.cwd)).kill_on_drop(true).spawn() {
-            Ok(c) => c,
+        let proc = match crate::pty::spawn(self.spec(&cmd), &cmd, &ctx.cwd, false) {
+            Ok(p) => p,
             Err(e) => return ToolOutput::error(format!("Failed to start {}: {e}", self.prog.exe.display())),
         };
-        let pid = child.id().unwrap_or(0);
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
-        if let Some(out) = child.stdout.take() {
-            tokio::spawn(pump(out, tx.clone()));
-        }
-        if let Some(err) = child.stderr.take() {
-            tokio::spawn(pump(err, tx.clone()));
-        }
-        drop(tx);
         let mut lines: Vec<String> = Vec::new();
         let mut captured = 0usize;
         let mut dropped = 0usize;
-        let deadline = tokio::time::sleep(timeout);
-        tokio::pin!(deadline);
-        let mut outcome: Option<Result<std::process::ExitStatus, &'static str>> = None;
-        let mut streams_open = true;
-        loop {
+        let mut seen = 0usize;
+        // time spent waiting for the user to answer a prompt does not count toward the timeout
+        let mut busy = Duration::ZERO;
+        let tick = Duration::from_millis(50);
+        let outcome: Result<Option<i32>, &'static str> = loop {
+            let (new, total) = proc.lines_since(seen);
+            seen = total;
+            for l in new {
+                ctx.report(l.clone());
+                captured += l.len() + 1;
+                if captured > 400_000 {
+                    dropped += 1;
+                } else {
+                    lines.push(l);
+                }
+            }
+            if let Some(code) = proc.exit_code() {
+                let (rest, _) = proc.lines_since(seen);
+                lines.extend(rest);
+                break Ok(code);
+            }
+            if busy >= timeout {
+                proc.kill();
+                break Err("timeout");
+            }
             tokio::select! {
-                line = rx.recv(), if streams_open => match line {
-                    Some(l) => {
-                        ctx.report(l.clone());
-                        captured += l.len() + 1;
-                        if captured > 400_000 {
-                            dropped += 1;
-                        } else {
-                            lines.push(l);
-                        }
+                _ = tokio::time::sleep(tick) => {
+                    let partial = proc.partial();
+                    if partial.trim().is_empty() || !health_core::procs::looks_like_password_prompt(&partial) {
+                        busy += tick;
                     }
-                    None => streams_open = false,
-                },
-                st = child.wait(), if outcome.is_none() => {
-                    outcome = Some(st.map_err(|_| "wait failed"));
                 }
-                _ = &mut deadline, if outcome.is_none() => {
-                    kill_tree(pid);
-                    let _ = child.kill().await;
-                    outcome = Some(Err("timeout"));
-                }
-                _ = ctx.cancel.cancelled(), if outcome.is_none() => {
-                    kill_tree(pid);
-                    let _ = child.kill().await;
-                    outcome = Some(Err("cancelled"));
+                _ = ctx.cancel.cancelled() => {
+                    proc.kill();
+                    break Err("cancelled");
                 }
             }
-            if outcome.is_some() && !streams_open {
-                break;
-            }
-            if matches!(outcome, Some(Err(_))) {
-                // don't wait forever for grandchildren holding the pipes
-                let drain = tokio::time::timeout(Duration::from_millis(500), async {
-                    while let Some(l) = rx.recv().await {
-                        lines.push(l);
-                    }
-                })
-                .await;
-                let _ = drain;
-                break;
+        };
+        if outcome.is_err() {
+            // give the reader a moment to collect the last lines
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            let (rest, _) = proc.lines_since(seen);
+            lines.extend(rest);
+            let partial = proc.partial();
+            if !partial.trim().is_empty() {
+                lines.push(partial);
             }
         }
         let full = lines.join("\n");
@@ -256,22 +217,22 @@ impl Tool for Shell {
         let omitted = lines.len().saturating_sub(20) + dropped;
         let display = ToolDisplay::Lines { lines: tail_lines, omitted };
         match outcome {
-            Some(Ok(status)) => {
-                let code = status.code().unwrap_or(-1);
+            Ok(code) => {
+                let code = code.unwrap_or(-1);
                 let text = if body.trim().is_empty() { format!("Exit code: {code}\n(no output)") } else { format!("Exit code: {code}\n{body}") };
                 ToolOutput { content: vec![health_core::ToolResultPart::text(text)], is_error: code != 0, display }
             }
-            Some(Err("timeout")) => ToolOutput {
+            Err("timeout") => ToolOutput {
                 content: vec![health_core::ToolResultPart::text(format!("Command timed out after {} s and was killed.\n{body}", timeout.as_secs()))],
                 is_error: true,
                 display,
             },
-            Some(Err("cancelled")) => ToolOutput {
+            Err("cancelled") => ToolOutput {
                 content: vec![health_core::ToolResultPart::text(format!("Command was cancelled by the user.\n{body}"))],
                 is_error: true,
                 display: ToolDisplay::Summary { text: t!("Остановлено пользователем", "Stopped by the user").into() },
             },
-            _ => ToolOutput::error("Command failed to run."),
+            Err(_) => ToolOutput::error("Command failed to run."),
         }
     }
 }
@@ -285,6 +246,45 @@ mod tests {
         ToolCtx { cwd: std::env::temp_dir(), cancel: CancellationToken::new(), shell: ShellKind::PowerShell, progress: None, call_id: "t".into() }
     }
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn bash_output_exit_code_and_timeout() {
+        let sh = Shell::new(ShellKind::Bash);
+        let out = sh.run(json!({"command": "echo 'привет'; echo oops >&2; exit 3"}), ctx()).await;
+        let t = out.text();
+        assert!(t.contains("Exit code: 3") && t.contains("привет") && t.contains("oops"), "{t}");
+        assert!(out.is_error);
+        let start = std::time::Instant::now();
+        let out = sh.run(json!({"command": "sleep 30 & sleep 30", "timeout_secs": 2}), ctx()).await;
+        assert!(out.text().contains("timed out"));
+        assert!(start.elapsed() < Duration::from_secs(10));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn password_prompt_is_answered_through_the_terminal() {
+        let sh = Shell::new(ShellKind::Bash);
+        let task = tokio::spawn(async move { sh.run(json!({"command": "read -s -p 'Password: ' x; echo; echo got:$x"}), ctx()).await });
+        // the UI side: wait for the prompt, then type the answer
+        let reg = health_core::procs::registry();
+        let mut answered = false;
+        for _ in 0..100 {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            if let Some(p) = reg.pending_prompt(false) {
+                assert!(p.secret, "{p:?}");
+                reg.get(p.proc_id).unwrap().send_line("s3cret").unwrap();
+                answered = true;
+                break;
+            }
+        }
+        assert!(answered, "no password prompt detected");
+        let out = task.await.unwrap();
+        let t = out.text();
+        assert!(t.contains("got:s3cret") && !out.is_error, "{t}");
+        assert_eq!(t.matches("s3cret").count(), 1, "password must not be echoed: {t}");
+    }
+
+    #[cfg(windows)]
     #[tokio::test]
     async fn powershell_output_exit_code_and_timeout() {
         let sh = Shell::new(ShellKind::PowerShell);

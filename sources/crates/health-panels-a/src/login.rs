@@ -191,7 +191,11 @@ impl LoginPanel {
 
     fn start(&mut self) {
         self.stage = Stage::Starting;
-        let host = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "Windows".into());
+        let host = std::env::var("COMPUTERNAME")
+            .ok()
+            .or_else(|| std::fs::read_to_string("/etc/hostname").ok().map(|h| h.trim().to_string()))
+            .filter(|h| !h.is_empty())
+            .unwrap_or_else(|| if cfg!(windows) { "Windows".into() } else { "Linux".into() });
         let client = format!("Health {} · {host}", health_core::APP_VERSION);
         self.post("/api/app/device/start", serde_json::json!({ "client": client }), |r| match r {
             Ok(v) => match serde_json::from_value::<Start>(v) {

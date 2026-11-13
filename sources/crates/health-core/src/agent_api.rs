@@ -32,6 +32,25 @@ pub enum AgentCommand {
     Shutdown,
 }
 
+/// One question of the `ask` tool.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AskQuestion {
+    pub question: String,
+    /// Ready-made answers (may be empty: free text only).
+    pub options: Vec<String>,
+    /// Several options may be picked.
+    pub multi: bool,
+}
+
+/// The model asks the user several questions at once (`ask` tool).
+#[derive(Debug)]
+pub struct AskRequest {
+    pub call_id: String,
+    pub questions: Vec<AskQuestion>,
+    /// One answer per question; `None` = the user dismissed the questions.
+    pub respond: oneshot::Sender<Option<Vec<String>>>,
+}
+
 /// User's answer to a permission prompt.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PermissionDecision {
@@ -75,6 +94,13 @@ pub enum AgentEvent {
     /// Tool call fully received; `title` from `Tool::title`.
     ToolCallReady { call_id: String, name: String, title: String, input: Value },
     PermissionNeeded(PermissionRequest),
+    /// The `ask` tool waits for the user's answers.
+    Ask(AskRequest),
+    /// The `/boss` supervisor stopped the agent: what is wrong and how to fix it.
+    Boss { text: String },
+    /// The agent started a turn by itself (a background command finished while it was idle);
+    /// `display` is the line the transcript shows as the "user" message.
+    AutoSubmit { display: String },
     ToolRunning { call_id: String },
     /// Live output line (shell).
     ToolProgress { call_id: String, line: String },

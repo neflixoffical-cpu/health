@@ -19,7 +19,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.1.0"
+version = "1.2.0"
 edition = "2021"
 authors = ["Health"]
 license = "MIT"
@@ -66,6 +66,8 @@ regex = "1"
 globset = "0.4"
 ignore = "0.4"
 similar = "2"
+portable-pty = "0.9"
+strip-ansi-escapes = "0.2"
 sha2 = "0.10"
 hex = "0.4"
 url = "2"
@@ -74,7 +76,7 @@ winreg = "0.52"
 miniz_oxide = "0.8"
 png = "0.17"
 embed-resource = "3"
-arboard = "3"
+arboard = { version = "3", features = ["wayland-data-control"] }
 open = "5"
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",

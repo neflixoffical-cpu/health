@@ -20,3 +20,10 @@ Thumbs.db
 
 # промо-сайт хранится только локально
 /site/
+
+# сборки под Linux / кросс-сборка Windows
+/dist/
+/target-win/
+/packaging/arch/src/
+/packaging/arch/pkg/
+/packaging/arch/*.pkg.tar.zst

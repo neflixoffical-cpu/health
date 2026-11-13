@@ -324,3 +324,12 @@ async fn login_through_the_cabinet() {
     assert!(s.contains("Осталось токенов"), "{s}");
     let _ = http.post(format!("{cabinet}/api/account/delete")).header("X-Health", "1").header("Cookie", &cookie).json(&serde_json::json!({"password": "password-123"})).send().await;
 }
+
+#[test]
+fn token_budget_parsing() {
+    use crate::app::parse_tokens;
+    assert_eq!(parse_tokens("200k"), Some(200_000));
+    assert_eq!(parse_tokens("1.5m"), Some(1_500_000));
+    assert_eq!(parse_tokens("50 000"), Some(50_000));
+    assert_eq!(parse_tokens("abc"), None);
+}

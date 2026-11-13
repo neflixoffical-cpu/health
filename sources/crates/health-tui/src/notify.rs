@@ -70,8 +70,19 @@ fn toast(title: &str, body: &str) {
         }
     });
 }
+/// Desktop notification via `notify-send` (libnotify), if installed.
 #[cfg(not(windows))]
-fn toast(_title: &str, _body: &str) {}
+fn toast(title: &str, body: &str) {
+    let (title, body) = (title.to_string(), body.to_string());
+    std::thread::spawn(move || {
+        let _ = std::process::Command::new("notify-send")
+            .args(["--app-name=Health", "--", &title, &body])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    });
+}
 
 #[cfg(test)]
 mod tests {

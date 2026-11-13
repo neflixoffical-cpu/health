@@ -39,7 +39,11 @@ pub fn draw(app: &mut App, f: &mut Frame) {
     let w = area.width;
     let box_w = w.saturating_sub(2);
     // bottom block: permission prompt or input
-    let bottom_h = if app.perm.is_some() {
+    let bottom_h = if app.iprompt.is_some() {
+        iprompt_height(app)
+    } else if app.ask.is_some() {
+        ask_height(app, box_w).min(area.height / 2)
+    } else if app.perm.is_some() {
         perm_height(app, box_w)
     } else {
         (app.input.height(box_w.saturating_sub(6)) + 2).clamp(3, (area.height / 3).max(3))
@@ -63,7 +67,11 @@ pub fn draw(app: &mut App, f: &mut Frame) {
     if app.busy {
         draw_indicator(app, f.buffer_mut(), indicator, now);
     }
-    if app.perm.is_some() {
+    if app.iprompt.is_some() {
+        draw_iprompt(app, f.buffer_mut(), bottom, now);
+    } else if app.ask.is_some() {
+        draw_ask(app, f.buffer_mut(), bottom, now);
+    } else if app.perm.is_some() {
         draw_perm(app, f.buffer_mut(), bottom, now);
     } else {
         draw_input(app, f.buffer_mut(), bottom, now);
@@ -450,6 +458,93 @@ fn draw_perm(app: &mut App, buf: &mut Buffer, r: Rect, now: Instant) {
     }
 }
 
+/// Last lines of the command waiting for input (context for the prompt).
+fn iprompt_context(app: &App) -> Vec<String> {
+    let Some(ip) = &app.iprompt else { return Vec::new() };
+    let Some(p) = health_core::procs::registry().get(ip.proc_id) else { return Vec::new() };
+    let mut t = p.tail(if ip.secret { 1 } else { 6 });
+    t.pop(); // the prompt line itself is shown separately
+    t
+}
+
+fn iprompt_height(app: &App) -> u16 {
+    2 + 1 + iprompt_context(app).len() as u16 + 1 + 3
+}
+
+fn draw_iprompt(app: &mut App, buf: &mut Buffer, r: Rect, now: Instant) {
+    let ctx_lines = iprompt_context(app);
+    let Some(ip) = app.iprompt.as_mut() else { return };
+    fill_bg(buf, r, SURFACE);
+    let (icon, what) = if ip.secret { ("🔑", t!("Команда запрашивает пароль", "The command asks for a password")) } else { ("⌨", t!("Команда ждёт ввода", "The command is waiting for input")) };
+    let border = blend(WARN, NEON, 0.3 * fx::pulse(now, 2.0));
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::new().fg(border).bg(SURFACE))
+        .title(Line::from(vec![Span::styled(format!(" {icon} "), Style::new().fg(WARN)), Span::styled(what, Style::new().fg(TEXT).add_modifier(Modifier::BOLD)), Span::raw(" ")]));
+    let inner = block.inner(r);
+    block.render(r, buf);
+    let x = inner.x + 1;
+    let w = inner.width.saturating_sub(2);
+    let mut y = inner.y;
+    put_line(buf, x, y, w, &Line::from(vec![Span::styled(format!("#{} ", ip.proc_id), Style::new().fg(TEXT_MUTED)), Span::styled(ellipsize(&ip.title, w as usize - 6), Style::new().fg(TEXT_DIM))]));
+    y += 1;
+    for l in &ctx_lines {
+        put_line(buf, x, y, w, &Line::from(Span::styled(ellipsize(l, w as usize), Style::new().fg(MINT).bg(CODE_BG))));
+        y += 1;
+    }
+    put_line(buf, x, y, w, &Line::from(Span::styled(ellipsize(&ip.text, w as usize), Style::new().fg(NEON).add_modifier(Modifier::BOLD))));
+    y += 1;
+    let label = if ip.secret { t!("Пароль не показывается и не попадает к модели", "The password is hidden and never sent to the model") } else { t!("Ответ уйдёт в консоль команды", "The answer goes to the command's console") };
+    ip.field.render_boxed(buf, Rect::new(x, y, w, 3), label, true, now);
+}
+
+fn ask_lines(app: &App) -> usize {
+    app.ask.as_ref().map(|a| a.question().options.len() + 1).unwrap_or(0)
+}
+
+fn ask_height(app: &App, _w: u16) -> u16 {
+    (2 + 2 + ask_lines(app) as u16 + 3 + 1).min(26)
+}
+
+fn draw_ask(app: &mut App, buf: &mut Buffer, r: Rect, now: Instant) {
+    let Some(a) = app.ask.as_mut() else { return };
+    fill_bg(buf, r, SURFACE);
+    let total = a.req.questions.len();
+    let border = blend(INFO, NEON, 0.3 * fx::pulse(now, 2.0));
+    let title = if total > 1 { tf!("Вопрос {} из {}", "Question {} of {}", a.idx + 1, total) } else { t!("Вопрос", "Question").to_string() };
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::new().fg(border).bg(SURFACE))
+        .title(Line::from(vec![Span::styled(" ? ", Style::new().fg(INFO)), Span::styled(title, Style::new().fg(TEXT).add_modifier(Modifier::BOLD)), Span::raw(" ")]));
+    let inner = block.inner(r);
+    block.render(r, buf);
+    let x = inner.x + 1;
+    let w = inner.width.saturating_sub(2);
+    let mut y = inner.y;
+    let q = a.question().clone();
+    put_line(buf, x, y, w, &Line::from(Span::styled(ellipsize(&q.question, w as usize), Style::new().fg(NEON).add_modifier(Modifier::BOLD))));
+    y += 1;
+    let hint = if q.multi { t!("Пробел — отметить · Enter — ответить · Esc — пропустить", "Space to mark · Enter to answer · Esc to skip") } else { t!("↑↓ или цифра · Enter — ответить · Esc — пропустить", "↑↓ or a digit · Enter to answer · Esc to skip") };
+    put_line(buf, x, y, w, &Line::from(Span::styled(hint, Style::new().fg(TEXT_MUTED))));
+    y += 1;
+    for (i, o) in q.options.iter().enumerate() {
+        if y >= inner.bottom().saturating_sub(3) {
+            break;
+        }
+        let sel = i == a.sel;
+        let mark = if q.multi { if a.picked[i] { "[x] " } else { "[ ] " } } else { "" };
+        let st = if sel { Style::new().fg(NEON).add_modifier(Modifier::BOLD) } else { Style::new().fg(TEXT_DIM) };
+        let line = Line::from(vec![Span::styled(if sel { "› " } else { "  " }, Style::new().fg(NEON)), Span::styled(format!("{}. {mark}", i + 1), Style::new().fg(TEXT_MUTED)), Span::styled(ellipsize(o, w as usize - 8), st)]);
+        put_line(buf, x, y, w, &line);
+        hit::register(Rect::new(x, y, (line.width() as u16).min(w), 1), vec![hit::key(KeyCode::Char(char::from(b'1' + (i as u8).min(8))))]);
+        y += 1;
+    }
+    let on_custom = a.sel == a.custom_row();
+    a.custom.render_boxed(buf, Rect::new(x, y, w, 3), t!("Свой ответ", "Your own answer"), on_custom, now);
+}
+
 fn draw_footer(app: &App, buf: &mut Buffer, r: Rect) {
     let cfg = app.services.config();
     let (mode_txt, mode_color) = match cfg.permission_mode {
@@ -469,6 +564,26 @@ fn draw_footer(app: &App, buf: &mut Buffer, r: Rect) {
     hit::register(Rect::new(r.x + 1 + mode_w + 3 + "/help · ".width() as u16, r.y, details.width() as u16, 1), vec![hit::key_mod(KeyCode::Char('o'), KeyModifiers::CONTROL)]);
     let s = app.services.session.read().clone();
     let mut right: Vec<Span> = Vec::new();
+    if cfg.dry {
+        right.push(Span::styled(" DRY ", Style::new().fg(BG).bg(WARN).add_modifier(Modifier::BOLD)));
+        right.push(Span::raw("  "));
+    }
+    if cfg.boss.enabled {
+        right.push(Span::styled("👔 boss  ", Style::new().fg(MINT)));
+    }
+    let running = health_core::procs::registry().running_count();
+    if running > 0 {
+        right.push(Span::styled(format!("⚙ {running} /process  "), Style::new().fg(NEON)));
+    }
+    if health_core::workflow::workflows().any_running() {
+        right.push(Span::styled("⧉ workflow ctrl+i  ", Style::new().fg(NEON)));
+    }
+    if let Some(b) = cfg.budget_tokens {
+        let used = s.total.total();
+        let ratio = used as f64 / b.max(1) as f64;
+        let color = if ratio >= 1.0 { ERROR } else if ratio >= 0.8 { WARN } else { TEXT_DIM };
+        right.push(Span::styled(format!("{} {}/{}  ", t!("бюджет", "budget"), util::human_tokens(used), util::human_tokens(b)), Style::new().fg(color)));
+    }
     if let Some(m) = &cfg.current_model {
         if let Some(window) = app.services.providers.model_info(m).and_then(|i| i.context_window).filter(|w| *w > 0) {
             let ratio = s.context_tokens as f64 / window as f64;

@@ -4,6 +4,7 @@
 //! agent events and an animation clock, and draws at up to `Config.ui.fps`.
 
 mod app;
+mod clip;
 mod commands;
 mod input;
 mod markdown;
@@ -120,6 +121,7 @@ pub async fn run(services: Services, mut agent: AgentHandle, factory: PanelFacto
         }
     };
     let _ = agent.commands.send(AgentCommand::Shutdown);
+    health_core::procs::registry().kill_all();
     restore_terminal();
     let _ = std::panic::take_hook();
     result
@@ -187,6 +189,57 @@ pub fn snapshot_html(scene: &str, width: u16, height: u16, services: &Services, 
             }
         }
     }
+    // demo data for the 1.2 screens
+    if matches!(scene, "sudo" | "process" | "ask" | "workflow") {
+        let reg = health_core::procs::registry();
+        let p = reg.register("sudo pacman -Syu", "/home/user/project", false);
+        p.push_output(":: Synchronizing package databases...\n core is up to date\n extra is up to date\n[sudo] password for user: ");
+        let b = reg.register("cargo build --release", "/home/user/project", true);
+        b.push_output("   Compiling serde v1.0.210\n   Compiling tokio v1.40.0\n   Compiling health-core v1.2.0\n");
+        let d = reg.register("npm test", "/home/user/web", true);
+        d.push_output("PASS src/app.test.ts\nTests: 42 passed\n");
+        reg.finished(&d, Some(0));
+        let _ = reg.take_done();
+    }
+    if scene == "workflow" {
+        let wf = health_core::workflow::workflows().start(
+            "Рефакторинг API",
+            vec![
+                ("code".into(), "Модуль auth".into(), "Перепиши auth на новый клиент".into()),
+                ("code".into(), "Модуль billing".into(), "Перепиши billing".into()),
+                ("build".into(), "Сборка Linux".into(), "cargo build".into()),
+                ("review".into(), "Ревью безопасности".into(), "Проверь уязвимости".into()),
+            ],
+        );
+        wf.update(0, |a| {
+            a.status = health_core::workflow::WfStatus::Done;
+            a.started = Some(Instant::now() - Duration::from_secs(40));
+            a.ended = Some(Instant::now());
+            a.report = "Готово".into();
+        });
+        wf.update(1, |a| {
+            a.status = health_core::workflow::WfStatus::Running;
+            a.started = Some(Instant::now() - Duration::from_secs(12));
+        });
+        wf.log(1, "› Чтение src/billing.rs");
+        wf.update(2, |a| a.status = health_core::workflow::WfStatus::Running);
+        wf.log(2, "› bash · cargo build --release");
+    }
+    if scene == "sudo" {
+        std::thread::sleep(Duration::from_millis(150));
+        app.on_tick();
+    }
+    if scene == "ask" {
+        let (rtx, _rrx) = tokio::sync::oneshot::channel();
+        app.on_agent(AgentEvent::Ask(health_core::AskRequest {
+            call_id: "q".into(),
+            questions: vec![
+                health_core::AskQuestion { question: "Какую базу данных использовать?".into(), options: vec!["PostgreSQL".into(), "SQLite".into(), "MySQL".into()], multi: false },
+                health_core::AskQuestion { question: "Что добавить?".into(), options: vec!["Тесты".into(), "Docker".into()], multi: true },
+            ],
+            respond: rtx,
+        }));
+    }
     let panel = match scene {
         "model" => Some(PanelKind::ModelPicker { query: None }),
         "keys" => Some(PanelKind::Keys { add: false }),
@@ -205,6 +258,10 @@ pub fn snapshot_html(scene: &str, width: u16, height: u16, services: &Services, 
         "agents" => Some(PanelKind::Agents),
         "login" => Some(PanelKind::Login),
         "reset" => Some(PanelKind::Reset),
+        "process" => Some(PanelKind::Process),
+        "workflow" => Some(PanelKind::Workflow),
+        "profile" => Some(PanelKind::Profile),
+        "flow" => Some(PanelKind::Flow),
         _ => None,
     };
     if let Some(k) = panel {

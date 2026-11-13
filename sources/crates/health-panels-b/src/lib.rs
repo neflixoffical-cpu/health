@@ -47,5 +47,5 @@ pub(crate) fn ready<T>(slot: &mut Option<JoinHandle<T>>) -> Option<T> {
 /// Open a folder in Explorer.
 pub(crate) fn open_folder(p: &std::path::Path) {
     let _ = std::fs::create_dir_all(p);
-    let _ = std::process::Command::new("explorer.exe").arg(p).spawn();
+    let _ = std::process::Command::new(if cfg!(windows) { "explorer.exe" } else { "xdg-open" }).arg(p).spawn();
 }

@@ -15,6 +15,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
 pub const PROTOCOL_VERSION: &str = "2025-06-18";
+#[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// Events a connection reports to its owner.
@@ -60,8 +61,12 @@ pub fn resolve_command(cmd: &str) -> Option<(PathBuf, bool)> {
         .map(|s| s.to_lowercase())
         .collect();
     let try_exts = |base: PathBuf| -> Option<PathBuf> {
-        if base.extension().is_some() && base.is_file() {
+        // on Unix executables usually have no extension (`npx`, `uvx`)
+        if (cfg!(unix) || base.extension().is_some()) && base.is_file() {
             return Some(base);
+        }
+        if cfg!(unix) {
+            return None;
         }
         for e in &exts {
             let c = PathBuf::from(format!("{}{}", base.display(), e));
@@ -132,6 +137,11 @@ impl Conn {
                 {
                     use std::os::windows::process::CommandExt;
                     c.creation_flags(CREATE_NO_WINDOW);
+                }
+                #[cfg(unix)]
+                {
+                    use std::os::unix::process::CommandExt;
+                    c.process_group(0);
                 }
                 let mut child = tokio::process::Command::from(c).kill_on_drop(true).spawn().map_err(|e| format!("failed to start {}: {e}", exe.display()))?;
                 let pid = child.id();
@@ -386,9 +396,10 @@ fn kill_tree(pid: u32) {
             .creation_flags(CREATE_NO_WINDOW)
             .status();
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     {
-        let _ = pid;
+        // the server runs in its own process group (see `open`), kill all of it
+        let _ = std::process::Command::new("kill").args(["-KILL", "--", &format!("-{pid}")]).stdout(Stdio::null()).stderr(Stdio::null()).status();
     }
 }
 

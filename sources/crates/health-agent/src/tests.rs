@@ -157,7 +157,7 @@ async fn text_turn_has_no_system_prompt() {
     assert!(log.last().unwrap().contains("EndTurn"));
     let req = &s.script.seen.lock()[0];
     assert!(req.system.is_none(), "Health must not add a system prompt");
-    assert_eq!(req.tools.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), vec!["agent", "edit", "read", "slow"], "sorted tools");
+    assert_eq!(req.tools.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), vec!["agent", "ask", "edit", "read", "slow", "workflow"], "sorted tools");
     assert!(req.tools.iter().all(|t| t.name != "custom_reasoning"), "custom_reasoning only with /customeffort");
 }
 
@@ -430,4 +430,47 @@ async fn queue_and_reset() {
             break;
         }
     }
+}
+
+#[tokio::test]
+async fn idle_agent_is_told_when_a_background_command_ends() {
+    let mut s = setup(vec![Step::Reply(vec![ContentBlock::text("noted")], StopReason::EndTurn)], PermissionMode::Ask, true);
+    let reg = health_core::procs::registry();
+    let p = reg.register("cargo build", "/tmp", true);
+    p.push_output("Finished release\n");
+    reg.finished(&p, Some(0));
+    let mut auto = None;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let ev = tokio::time::timeout_at(deadline, s.handle.events.recv()).await.expect("no events").expect("closed");
+        match ev {
+            AgentEvent::AutoSubmit { display } => auto = Some(display),
+            AgentEvent::TurnFinished { .. } => break,
+            _ => {}
+        }
+    }
+    assert!(auto.unwrap().contains(&format!("#{}", p.id)));
+    let req = &s.script.seen.lock()[0];
+    let text = req.messages.last().unwrap().text();
+    assert!(text.contains("cargo build") && text.contains("exit code 0") && text.contains("Finished release"), "{text}");
+}
+
+#[tokio::test]
+async fn workflow_runs_agents_by_category_in_parallel() {
+    let input = serde_json::json!({"title": "t", "groups": [
+        {"category": "code", "tasks": [{"name": "a", "task": "do a"}, {"name": "b", "task": "do b"}]},
+        {"category": "review", "tasks": [{"task": "check"}]}
+    ]});
+    let mut s = setup(vec![Step::Reply(vec![tool_with("w1", "workflow", input)], StopReason::ToolUse)], PermissionMode::Ask, true);
+    let log = run_turn(&mut s.handle, "go", |_| PermissionDecision::AllowOnce).await;
+    assert!(log.contains(&"done:w1:false".to_string()), "{log:?}");
+    let wf = health_core::workflow::workflows().list().into_iter().find(|w| w.title == "t").expect("workflow stored");
+    let c = wf.counts();
+    assert_eq!((c.total, c.done), (3, 3));
+    assert_eq!(wf.categories(), vec!["code".to_string(), "review".to_string()]);
+    // the main agent got every report grouped by category
+    let seen = s.script.seen.lock();
+    let last = seen.last().unwrap();
+    let result = last.messages.iter().rev().find_map(|m| m.content.iter().find_map(|b| if let ContentBlock::ToolResult { content, .. } = b { Some(format!("{content:?}")) } else { None })).unwrap();
+    assert!(result.contains("## code") && result.contains("## review") && result.contains("3 done"), "{result}");
 }

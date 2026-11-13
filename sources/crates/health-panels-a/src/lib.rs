@@ -3,6 +3,7 @@
 
 mod agents;
 mod customeffort;
+pub mod extra;
 mod keys;
 pub mod login;
 mod misc;
@@ -30,6 +31,10 @@ pub fn open(kind: &PanelKind, s: &Services) -> Option<Box<dyn Panel>> {
         PanelKind::Agents => Box::new(agents::AgentsPanel::new(s)),
         PanelKind::Login => Box::new(login::LoginPanel::new(s)),
         PanelKind::Reset => Box::new(reset::ResetPanel::new()),
+        PanelKind::Process => Box::new(extra::ProcessPanel::new(s)),
+        PanelKind::Workflow => Box::new(extra::WorkflowPanel::new(s)),
+        PanelKind::Profile => Box::new(extra::ProfilePanel::new(s)),
+        PanelKind::Flow => Box::new(extra::FlowPanel::new(s)),
         _ => return None,
     })
 }

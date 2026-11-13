@@ -319,8 +319,12 @@ pub fn free_space(dir: &Path) -> Option<u64> {
     }
     #[cfg(not(windows))]
     {
-        let _ = dir;
-        None
+        let mut d = dir.to_path_buf();
+        while !d.exists() {
+            d = d.parent()?.to_path_buf();
+        }
+        let out = std::process::Command::new("df").args(["-B1", "--output=avail"]).arg(&d).stderr(std::process::Stdio::null()).output().ok()?;
+        String::from_utf8_lossy(&out.stdout).lines().nth(1)?.trim().parse().ok()
     }
 }
 

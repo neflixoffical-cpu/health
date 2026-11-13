@@ -1,4 +1,4 @@
-//! llama.cpp runtime: install official Windows builds from GitHub and run `llama-server.exe`
+//! llama.cpp runtime: install official Windows/Linux builds from GitHub and run `llama-server`
 //! inside a kill-on-close Job object (the server dies together with Health).
 
 use crate::download::fetch_file;
@@ -14,6 +14,7 @@ use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio_util::sync::CancellationToken;
 
+#[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -60,9 +61,25 @@ fn backend_slug(b: LocalBackend) -> &'static str {
     }
 }
 
+/// Release asset naming per platform: (platform slug, archive extension, CPU-only suffix).
+#[cfg(windows)]
+const PLAT: (&str, &str, &str) = ("win", ".zip", "-bin-win-cpu-x64.zip");
+#[cfg(not(windows))]
+const PLAT: (&str, &str, &str) = ("ubuntu", ".tar.gz", "-bin-ubuntu-x64.tar.gz");
+
+/// `llama-server.exe` on Windows, `llama-server` elsewhere.
+pub const SERVER_EXE: &str = if cfg!(windows) { "llama-server.exe" } else { "llama-server" };
+
 /// Choose the newest release that has the Windows x64 build for `backend`
 /// (`prefer_new_cuda` = pick the highest CUDA major, else the lowest).
 pub fn pick_assets(releases: &Value, backend: LocalBackend, prefer_new_cuda: bool) -> Option<(String, Vec<Asset>)> {
+    pick_assets_for(releases, backend, prefer_new_cuda, PLAT)
+}
+
+fn pick_assets_for(releases: &Value, backend: LocalBackend, prefer_new_cuda: bool, plat: (&str, &str, &str)) -> Option<(String, Vec<Asset>)> {
+    let (os, ext, cpu_suffix) = plat;
+    let cuda_mid = format!("-bin-{os}-cuda-");
+    let tail = format!("-x64{ext}");
     for r in releases.as_array()? {
         if r.get("draft").and_then(|d| d.as_bool()) == Some(true) {
             continue;
@@ -86,29 +103,33 @@ pub fn pick_assets(releases: &Value, backend: LocalBackend, prefer_new_cuda: boo
         let find = |suffix: &str| assets.iter().find(|a| a.name.starts_with("llama-") && a.name.ends_with(suffix)).cloned();
         match backend {
             LocalBackend::Cpu => {
-                if let Some(a) = find("-bin-win-cpu-x64.zip") {
+                if let Some(a) = find(cpu_suffix) {
                     return Some((tag, vec![a]));
                 }
             }
             LocalBackend::Vulkan => {
-                if let Some(a) = find("-bin-win-vulkan-x64.zip") {
+                if let Some(a) = find(&format!("-bin-{os}-vulkan{tail}")) {
                     return Some((tag, vec![a]));
                 }
             }
             LocalBackend::Cuda | LocalBackend::Auto => {
                 let mut cuda: Vec<(f64, Asset)> = assets
                     .iter()
-                    .filter(|a| a.name.starts_with("llama-") && a.name.contains("-bin-win-cuda-") && a.name.ends_with("-x64.zip"))
+                    .filter(|a| a.name.starts_with("llama-") && a.name.contains(&cuda_mid) && a.name.ends_with(&tail))
                     .filter_map(|a| {
-                        let ver = a.name.split("-bin-win-cuda-").nth(1)?.trim_end_matches("-x64.zip").to_string();
+                        let ver = a.name.split(cuda_mid.as_str()).nth(1)?.trim_end_matches(tail.as_str()).to_string();
                         Some((ver.parse::<f64>().ok()?, a.clone()))
                     })
                     .collect();
                 cuda.sort_by(|a, b| a.0.total_cmp(&b.0));
                 let chosen = if prefer_new_cuda { cuda.last() } else { cuda.first() };
                 if let Some((ver, main)) = chosen {
-                    let ver_s = main.name.split("-bin-win-cuda-").nth(1).unwrap_or("").trim_end_matches("-x64.zip").to_string();
-                    let rt = assets.iter().find(|a| a.name == format!("cudart-llama-bin-win-cuda-{ver_s}-x64.zip")).cloned();
+                    let ver_s = main.name.split(cuda_mid.as_str()).nth(1).unwrap_or("").trim_end_matches(tail.as_str()).to_string();
+                    // Windows: `cudart-llama-bin-win-cuda-12.4-x64.zip`; Linux: `cudart-llama-<tag>-bin-ubuntu-cuda-12.8-x64.tar.gz`
+                    let rt = assets
+                        .iter()
+                        .find(|a| a.name == format!("cudart-llama{cuda_mid}{ver_s}{tail}") || a.name == format!("cudart-llama-{tag}{cuda_mid}{ver_s}{tail}"))
+                        .cloned();
                     let _ = ver;
                     let mut v = vec![main.clone()];
                     if let Some(rt) = rt {
@@ -220,7 +241,7 @@ impl Runtime {
     pub fn installed(tag: Option<&str>, backend: Option<LocalBackend>) -> Option<InstalledRuntime> {
         let (tag, backend) = (tag?, backend?);
         let dir = Self::llama_root().join(format!("{tag}-{}", backend_slug(backend)));
-        let exe = find_exe(&dir, "llama-server.exe")?;
+        let exe = find_exe(&dir, SERVER_EXE)?;
         Some(InstalledRuntime { tag: tag.to_string(), backend, dir, server_exe: exe })
     }
 
@@ -298,20 +319,28 @@ impl Runtime {
             }
             std::fs::create_dir_all(&t2)?;
             for z in &zips {
-                let f = std::fs::File::open(z)?;
-                let mut ar = zip::ZipArchive::new(f).context("zip")?;
-                ar.extract(&t2).context("extract")?;
+                if z.to_string_lossy().ends_with(".tar.gz") {
+                    let st = std::process::Command::new("tar").arg("-xzf").arg(z).arg("-C").arg(&t2).status().context("tar")?;
+                    if !st.success() {
+                        anyhow::bail!("tar -xzf {} failed", z.display());
+                    }
+                } else {
+                    let f = std::fs::File::open(z)?;
+                    let mut ar = zip::ZipArchive::new(f).context("zip")?;
+                    ar.extract(&t2).context("extract")?;
+                }
             }
             Ok(())
         })
         .await??;
-        let exe = find_exe(&target, "llama-server.exe").ok_or_else(|| anyhow!(t!("В архиве нет llama-server.exe", "llama-server.exe not found in the archive")))?;
+        let exe = find_exe(&target, SERVER_EXE).ok_or_else(|| anyhow!(t!("В архиве нет llama-server", "llama-server not found in the archive")))?;
         // cudart DLLs must sit next to the server
         if let Some(server_dir) = exe.parent() {
             if server_dir != target {
                 for e in std::fs::read_dir(&target)?.flatten() {
                     let p = e.path();
-                    if p.extension().map(|x| x.eq_ignore_ascii_case("dll")).unwrap_or(false) {
+                    let lib = p.extension().map(|x| x.eq_ignore_ascii_case("dll")).unwrap_or(false) || p.file_name().map(|n| n.to_string_lossy().contains(".so")).unwrap_or(false);
+                    if lib && p.is_file() {
                         let _ = std::fs::copy(&p, server_dir.join(e.file_name()));
                     }
                 }
@@ -387,6 +416,16 @@ impl Runtime {
         c.args(extra);
         if let Some(dir) = rt.server_exe.parent() {
             c.current_dir(dir);
+            // bundled libggml*.so / libcudart*.so live next to the server
+            #[cfg(unix)]
+            {
+                let mut ld = std::ffi::OsString::from(dir);
+                if let Some(old) = std::env::var_os("LD_LIBRARY_PATH").filter(|v| !v.is_empty()) {
+                    ld.push(":");
+                    ld.push(old);
+                }
+                c.env("LD_LIBRARY_PATH", ld);
+            }
         }
         c.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
         #[cfg(windows)]
@@ -493,16 +532,34 @@ mod tests {
     use super::*;
     #[test]
     fn picks_real_assets() {
+        const W: (&str, &str, &str) = ("win", ".zip", "-bin-win-cpu-x64.zip");
         let v: Value = serde_json::from_str(include_str!("../tests/fixtures/gh_releases.json")).unwrap();
-        let (tag, a) = pick_assets(&v, LocalBackend::Cuda, true).unwrap();
+        let (tag, a) = pick_assets_for(&v, LocalBackend::Cuda, true, W).unwrap();
         assert!(tag.starts_with('b'));
         assert!(a[0].name.contains("cuda-13") && a[0].name.ends_with("-x64.zip"), "{:?}", a);
         assert!(a.len() == 2 && a[1].name.starts_with("cudart-"));
-        let (_, a) = pick_assets(&v, LocalBackend::Cuda, false).unwrap();
+        let (_, a) = pick_assets_for(&v, LocalBackend::Cuda, false, W).unwrap();
         assert!(a[0].name.contains("cuda-12"));
-        let (_, a) = pick_assets(&v, LocalBackend::Vulkan, true).unwrap();
+        let (_, a) = pick_assets_for(&v, LocalBackend::Vulkan, true, W).unwrap();
         assert!(a[0].name.ends_with("-bin-win-vulkan-x64.zip"));
-        let (_, a) = pick_assets(&v, LocalBackend::Cpu, true).unwrap();
+        let (_, a) = pick_assets_for(&v, LocalBackend::Cpu, true, W).unwrap();
         assert!(a[0].name.ends_with("-bin-win-cpu-x64.zip"));
+    }
+
+    #[test]
+    fn picks_linux_assets() {
+        const L: (&str, &str, &str) = ("ubuntu", ".tar.gz", "-bin-ubuntu-x64.tar.gz");
+        let mk = |n: &str| serde_json::json!({"name": n, "browser_download_url": format!("https://x/{n}"), "size": 1});
+        let v = serde_json::json!([{"tag_name": "b100", "assets": [
+            mk("llama-b100-bin-ubuntu-x64.tar.gz"), mk("llama-b100-bin-ubuntu-vulkan-x64.tar.gz"),
+            mk("llama-b100-bin-ubuntu-cuda-12.8-x64.tar.gz"), mk("llama-b100-bin-ubuntu-cuda-13.5-x64.tar.gz"),
+            mk("cudart-llama-b100-bin-ubuntu-cuda-13.5-x64.tar.gz"), mk("llama-b100-bin-win-cpu-x64.zip")
+        ]}]);
+        assert_eq!(pick_assets_for(&v, LocalBackend::Cpu, true, L).unwrap().1[0].name, "llama-b100-bin-ubuntu-x64.tar.gz");
+        assert_eq!(pick_assets_for(&v, LocalBackend::Vulkan, true, L).unwrap().1[0].name, "llama-b100-bin-ubuntu-vulkan-x64.tar.gz");
+        let (_, a) = pick_assets_for(&v, LocalBackend::Cuda, true, L).unwrap();
+        assert_eq!(a.len(), 2);
+        assert_eq!(a[1].name, "cudart-llama-b100-bin-ubuntu-cuda-13.5-x64.tar.gz");
+        assert!(pick_assets_for(&v, LocalBackend::Cuda, false, L).unwrap().1[0].name.contains("12.8"));
     }
 }

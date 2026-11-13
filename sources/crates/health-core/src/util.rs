@@ -18,7 +18,7 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         std::fs::create_dir_all(dir)?;
     }
     let tmp = path.with_extension(format!("tmp-{}", short_id()));
-    std::fs::write(&tmp, bytes)?;
+    write_private(&tmp, bytes)?;
     match std::fs::rename(&tmp, path) {
         Ok(()) => Ok(()),
         Err(_) => {
@@ -27,6 +27,22 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
             let _ = std::fs::remove_file(&tmp);
             r
         }
+    }
+}
+
+/// Write a file readable only by the current user on Unix (0600): config holds API keys,
+/// which on Linux have no DPAPI and are protected by file permissions instead.
+fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut f = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)?;
+        f.write_all(bytes)
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(path, bytes)
     }
 }
 

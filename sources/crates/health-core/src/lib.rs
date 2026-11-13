@@ -18,6 +18,8 @@ pub mod config;
 pub mod sessions;
 pub mod log;
 pub mod util;
+pub mod procs;
+pub mod workflow;
 
 pub use agent_api::*;
 pub use backend::*;
@@ -36,5 +38,5 @@ pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const MAX_KEYS: usize = 20;
 /// HTTP User-Agent used by every network request Health makes.
 pub fn user_agent() -> String {
-    format!("Health/{APP_VERSION} (Windows; terminal AI assistant)")
+    format!("Health/{APP_VERSION} ({}; terminal AI assistant)", if cfg!(windows) { "Windows" } else { "Linux" })
 }

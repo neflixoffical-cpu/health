@@ -541,6 +541,7 @@ fn create_shortcut(lnk: &Path, exe: &Path) -> Result<()> {
 mod tests {
     use super::*;
 
+    #[cfg(windows)]
     #[test]
     fn validate_rejects_bad_dirs() {
         assert!(validate_dir(Path::new("relative\\dir")).is_err());

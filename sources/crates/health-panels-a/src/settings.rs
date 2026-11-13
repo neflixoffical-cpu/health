@@ -131,7 +131,7 @@ impl SettingsPanel {
                 return vec![];
             }
             S::Folder => {
-                let _ = std::process::Command::new("explorer.exe").arg(health_core::paths::config_dir()).spawn();
+                let _ = std::process::Command::new(if cfg!(windows) { "explorer.exe" } else { "xdg-open" }).arg(health_core::paths::config_dir()).spawn();
                 return vec![];
             }
             _ => {}
@@ -146,7 +146,10 @@ impl SettingsPanel {
             S::Thinking => c.ui.show_thinking = !c.ui.show_thinking,
             S::Mouse => c.ui.mouse = !c.ui.mouse,
             S::Fps => c.ui.fps = cycle(&[20, 30, 60], c.ui.fps, dir),
-            S::Shell => c.shell = cycle(&[ShellKind::PowerShell, ShellKind::Cmd, ShellKind::GitBash], c.shell, dir),
+            S::Shell => {
+                let opts: &[ShellKind] = if cfg!(windows) { &[ShellKind::PowerShell, ShellKind::Cmd, ShellKind::GitBash] } else { &[ShellKind::Bash, ShellKind::PowerShell] };
+                c.shell = cycle(opts, c.shell, dir)
+            }
             S::ModelMode => c.models.mode = cycle(&[ModelMode::Hybrid, ModelMode::Auto, ModelMode::Manual], c.models.mode, dir),
             S::ChatOnly => c.models.chat_only = !c.models.chat_only,
             S::Refresh => c.models.refresh_hours = cycle(&[6, 12, 24, 72, 168], c.models.refresh_hours, dir),

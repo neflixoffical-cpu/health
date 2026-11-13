@@ -113,6 +113,14 @@ pub enum PanelKind {
     Login,
     /// `/reset` — wipe the configuration (asks to type `healthreset`).
     Reset,
+    /// `/process` — commands started by the model, their consoles and input.
+    Process,
+    /// `/workflow`, Ctrl+I — parallel agent teams.
+    Workflow,
+    /// `/profile` — named model presets.
+    Profile,
+    /// `/flow` — workflow tool settings.
+    Flow,
 }
 
 /// What a panel asks the shell to do.
